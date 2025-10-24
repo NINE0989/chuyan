@@ -8,6 +8,8 @@ from typing import Dict
 import numpy as np
 import glfw
 from OpenGL import GL
+import re
+from pathlib import Path
 
 from .uniforms import ShaderToyUniforms, TextureChannel
 
@@ -67,6 +69,35 @@ class ShaderViewer:
         with open(path, 'r', encoding='utf-8') as f:
             fs_src = f.read()
 
+        # Resolve #include directives by inlining the referenced files.
+        # Includes are resolved relative to the shader file's directory.
+        def _resolve_includes(src: str, base_dir: Path, seen: set[str] | None = None) -> str:
+            if seen is None:
+                seen = set()
+            out_lines: list[str] = []
+            for line in src.splitlines():
+                m = re.match(r'^\s*#include\s+"([^"]+)"', line)
+                if m:
+                    inc_name = m.group(1)
+                    inc_path = (base_dir / inc_name).resolve()
+                    inc_key = str(inc_path)
+                    if inc_key in seen:
+                        # already inlined; skip to avoid recursion
+                        continue
+                    if not inc_path.is_file():
+                        raise FileNotFoundError(f"Included shader not found: {inc_path}")
+                    seen.add(inc_key)
+                    inc_text = inc_path.read_text(encoding='utf-8')
+                    # strip any #version directives from included files
+                    inc_text = re.sub(r"^\s*#version.*$", "", inc_text, flags=re.MULTILINE)
+                    inc_text = _resolve_includes(inc_text, inc_path.parent, seen)
+                    out_lines.append(inc_text)
+                else:
+                    out_lines.append(line)
+            return "\n".join(out_lines)
+
+        fs_src = _resolve_includes(fs_src, Path(path).parent)
+
         # Compile shaders
         vs = self._compile_shader(self.VERTEX_SRC, GL.GL_VERTEX_SHADER)
         fs = self._compile_shader(fs_src, GL.GL_FRAGMENT_SHADER)
@@ -75,7 +106,9 @@ class ShaderViewer:
         # Get uniform locations
         uniform_names = [
             'iResolution', 'iTime', 'iTimeDelta', 'iFrameRate', 'iFrame',
-            'iMouse', 'iDate', 'iSampleRate'
+            'iMouse', 'iDate', 'iSampleRate',
+            # audio uniforms
+            'iAudioPeak', 'iAudioRMS', 'iAudioCentroid', 'iAudioFlux', 'iAudioRolloff', 'iAudioBands'
         ]
         self.uniforms = {
             name: GL.glGetUniformLocation(self.program, name)
@@ -128,6 +161,21 @@ class ShaderViewer:
             GL.glUniform4f(self.uniforms['iDate'], *uniforms.iDate)
         if self.uniforms['iSampleRate'] != -1:
             GL.glUniform1f(self.uniforms['iSampleRate'], uniforms.iSampleRate)
+
+        # audio uniforms
+        if self.uniforms.get('iAudioPeak', -1) != -1:
+            GL.glUniform1f(self.uniforms['iAudioPeak'], uniforms.iAudioPeak)
+        if self.uniforms.get('iAudioRMS', -1) != -1:
+            GL.glUniform1f(self.uniforms['iAudioRMS'], uniforms.iAudioRMS)
+        if self.uniforms.get('iAudioCentroid', -1) != -1:
+            GL.glUniform1f(self.uniforms['iAudioCentroid'], uniforms.iAudioCentroid)
+        if self.uniforms.get('iAudioFlux', -1) != -1:
+            GL.glUniform1f(self.uniforms['iAudioFlux'], uniforms.iAudioFlux)
+        if self.uniforms.get('iAudioRolloff', -1) != -1:
+            GL.glUniform1f(self.uniforms['iAudioRolloff'], uniforms.iAudioRolloff)
+        if self.uniforms.get('iAudioBands', -1) != -1:
+            # iAudioBands is a vec4
+            GL.glUniform4f(self.uniforms['iAudioBands'], *uniforms.iAudioBands)
 
         # Update channel textures
         for i, channel in enumerate(uniforms.iChannels):

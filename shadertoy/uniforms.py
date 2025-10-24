@@ -24,6 +24,15 @@ class ShaderToyUniforms:
     iMouse: Tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0)
     iDate: Tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0)
     iSampleRate: float = 44100.0
+    # audio-related uniforms (filled by application)
+    iAudioPeak: float = 0.0
+    iAudioRMS: float = 0.0
+    iAudioCentroid: float = 0.0
+    iAudioFlux: float = 0.0
+    iAudioRolloff: float = 0.0
+    # four-band energies packed into a vec4 / tuple
+    iAudioBands: Tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0)
+
     iChannels: List[TextureChannel] = field(default_factory=lambda: [
         TextureChannel() for _ in range(4)
     ])

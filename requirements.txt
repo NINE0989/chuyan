@@ -3,3 +3,4 @@ PyOpenGL
 numpy
 pyQt5
 pyqtgraph
+pyaudiowpatch

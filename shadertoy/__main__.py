@@ -22,6 +22,14 @@ class ShaderToyApp:
         
         # Setup audio
         self.audio = AudioSource()
+        # Try to start audio capture; if it fails we continue but note the state
+        try:
+            self.audio.start_capture()
+            self._audio_started = True
+            print("[audio] capture started")
+        except Exception as e:
+            self._audio_started = False
+            print(f"[audio] capture not started: {e}")
         
         # Initialize uniforms
         self.uniforms = ShaderToyUniforms()
@@ -75,8 +83,45 @@ class ShaderToyApp:
         
         # Update audio channel
         self.audio.update()
-        self.uniforms.iChannels[0].data = self.audio.get_texture_data()
+        texdata = self.audio.get_texture_data()
+        self.uniforms.iChannels[0].data = texdata
         self.uniforms.iChannels[0].time = self.uniforms.iTime
+        # fill audio-related uniforms
+        try:
+            self.uniforms.iSampleRate = float(self.audio.sample_rate)
+            self.uniforms.iAudioPeak = float(self.audio.peak)
+            self.uniforms.iAudioRMS = float(self.audio.rms)
+            # centroid normalized to Nyquist
+            nyq = float(self.audio.sample_rate) / 2.0 if self.audio.sample_rate else 1.0
+            self.uniforms.iAudioCentroid = float(self.audio.centroid / nyq) if nyq > 0 else 0.0
+            self.uniforms.iAudioFlux = float(self.audio.flux)
+            self.uniforms.iAudioRolloff = float(self.audio.rolloff)
+            be = self.audio.band_energies
+            if be is not None and len(be) >= 4:
+                self.uniforms.iAudioBands = (float(be[0]), float(be[1]), float(be[2]), float(be[3]))
+            else:
+                self.uniforms.iAudioBands = (0.0, 0.0, 0.0, 0.0)
+        except Exception:
+            pass
+
+        # Log a basic diagnostic every 60 frames so user can confirm capture
+        if self.frame_count % 60 == 0:
+            try:
+                import numpy as _np
+                peak = float(_np.max(texdata)) if texdata is not None else 0.0
+                # Also report raw audio buffer amplitude (before FFT/normalization)
+                try:
+                    with self.audio._lock:
+                        buf = self.audio._audio_buffer.copy()
+                    buf_peak = float(_np.max(_np.abs(buf)))
+                except Exception:
+                    buf_peak = 0.0
+
+                # print a concise message to console with running_peak
+                running_pk = getattr(self.audio, '_running_peak', 0.0)
+                print(f"[audio] frame={self.frame_count} tex_peak={peak:.6f} buf_peak={buf_peak:.6f} running_peak={running_pk:.6f}")
+            except Exception:
+                pass
 
     def run(self):
         """Main application loop"""
@@ -86,6 +131,12 @@ class ShaderToyApp:
                 self.update_uniforms()
                 self.viewer.render(self.uniforms)
         finally:
+            # Stop audio capture if we started it
+            try:
+                if getattr(self, '_audio_started', False):
+                    self.audio.stop_capture()
+            except Exception:
+                pass
             self.viewer.cleanup()
 
 
