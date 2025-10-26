@@ -22,3 +22,8 @@ void main(){
 	col += 0.05*sin(6.2831*(x*4.0 + iTime*0.5))*fft;
 	fragColor = vec4(col, 1.0);
 }
+
+// Standard main entrypoint
+void main() {
+    mainImage(fragColor, gl_FragCoord.xy);
+}

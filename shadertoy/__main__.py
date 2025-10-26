@@ -13,7 +13,6 @@ from shadertoy.shader import ShaderViewer
 from shadertoy.audio import AudioSource
 from shadertoy.uniforms import ShaderToyUniforms, TextureChannel
 
-
 class ShaderToyApp:
     """Main application class managing uniforms and rendering"""
     def __init__(self, shader_path: str, width: int = 1920, height: int = 480):
@@ -77,6 +76,30 @@ class ShaderToyApp:
         self.audio.update()
         self.uniforms.iChannels[0].data = self.audio.get_texture_data()
         self.uniforms.iChannels[0].time = self.uniforms.iTime
+        # fill audio-related uniforms - only sample rate
+        try:
+            self.uniforms.iSampleRate = float(self.audio.sample_rate)
+        except Exception:
+            pass
+
+        # Log a basic diagnostic every 60 frames so user can confirm capture
+        if self.frame_count % 60 == 0:
+            try:
+                import numpy as _np
+                peak = float(_np.max(texdata)) if texdata is not None else 0.0
+                # Also report raw audio buffer amplitude (before FFT/normalization)
+                try:
+                    with self.audio._lock:
+                        buf = self.audio._audio_buffer.copy()
+                    buf_peak = float(_np.max(_np.abs(buf)))
+                except Exception:
+                    buf_peak = 0.0
+
+                # print a concise message to console with running_peak
+                running_pk = getattr(self.audio, '_running_peak', 0.0)
+                print(f"[audio] frame={self.frame_count} tex_peak={peak:.6f} buf_peak={buf_peak:.6f} running_peak={running_pk:.6f}")
+            except Exception:
+                pass
 
     def run(self):
         """Main application loop"""
@@ -99,7 +122,7 @@ def main():
             sys.exit(1)
     else:
         # Use default shader
-        default_shader = Path(__file__).parent.parent / "shaders" / "audio_viz.glsl"
+        default_shader = Path(__file__).parent.parent / "shaders" / "ink_wash.glsl"
         if not default_shader.is_file():
             print("No shader file specified and default shader not found.")
             print("Usage: python -m shadertoy [shader_file]")

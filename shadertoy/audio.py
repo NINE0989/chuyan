@@ -6,6 +6,10 @@ import logging
 from typing import Optional
 import pyaudiowpatch as pyaudio
 import threading
+import audioUtils
+import os
+
+# 导入音频处理工具函数
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -17,6 +21,9 @@ class AudioSource:
         self.chunk_size = chunk_size
         self.fft_size = fft_size
         self.fft = np.zeros(fft_size, dtype=np.float32)
+        self._spec_smoothed = np.zeros(fft_size, dtype=np.float32)
+        # audio feature state
+        self.prev_spec = np.zeros(fft_size, dtype=np.float32)
         self._audio_buffer = np.zeros(chunk_size, dtype=np.float32)
         self._lock = threading.Lock()
         self._thread = None
@@ -61,23 +68,45 @@ class AudioSource:
                 logger.error(f"Audio read error: {e}")
 
     def update(self):
-        # 取最新音频数据做FFT
+        """更新音频特征 - 只计算FFT频谱"""
+        # 获取最新音频数据
         with self._lock:
             x = self._audio_buffer.copy()
-        if np.max(np.abs(x)) > 1e-6:
-            x = x / (np.max(np.abs(x)) + 1e-9)
-        win = np.hanning(len(x))
-        spec = np.abs(np.fft.rfft(x * win))
-        spec = spec[:self.fft_size]
-        if np.max(spec) > 1e-6:
-            spec = spec / (np.max(spec) + 1e-9)
-        self.fft[:len(spec)] = spec
+        
+        if x.size == 0:
+            return
+        
+        # 1. 计算FFT频谱
+        spec = np.fft.fft(x, self.fft_size, axis=0) / self.fft_size * 2
+        
+        # 2. 计算频率数组
+        freqs = np.fft.rfftfreq(len(x), d=1.0 / float(self.sample_rate))[:self.fft_size]
+        
+        # 3. 处理频谱用于可视化
+        spec_processed = audioUtils.process_spectrum_for_visualization(
+            spec=spec,
+            freqs=freqs,
+            prev_smoothed=self._spec_smoothed
+        )
+        
+        # # 保存平滑后的频谱供下次使用
+        self._spec_smoothed = spec_processed
+        
+        spec_processed = spec
+        
+        # 5. 存储最终结果
+        self.fft[:len(spec_processed)] = spec_processed
 
     def get_fft_data(self) -> Optional[np.ndarray]:
         return self.fft
 
     def get_texture_data(self) -> np.ndarray:
+        """
+        返回FFT频谱纹理数据
+        只使用R通道存储频谱
+        """
         arr = np.zeros((1, self.fft_size, 4), dtype=np.float32)
+        # R channel: normalized spectrum
         arr[0, :, 0] = self.fft
         return arr
 
