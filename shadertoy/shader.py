@@ -106,9 +106,7 @@ class ShaderViewer:
         # Get uniform locations
         uniform_names = [
             'iResolution', 'iTime', 'iTimeDelta', 'iFrameRate', 'iFrame',
-            'iMouse', 'iDate', 'iSampleRate',
-            # audio uniforms
-            'iAudioPeak', 'iAudioRMS', 'iAudioCentroid', 'iAudioFlux', 'iAudioRolloff', 'iAudioBands'
+            'iMouse', 'iDate', 'iSampleRate'
         ]
         self.uniforms = {
             name: GL.glGetUniformLocation(self.program, name)
@@ -161,21 +159,6 @@ class ShaderViewer:
             GL.glUniform4f(self.uniforms['iDate'], *uniforms.iDate)
         if self.uniforms['iSampleRate'] != -1:
             GL.glUniform1f(self.uniforms['iSampleRate'], uniforms.iSampleRate)
-
-        # audio uniforms
-        if self.uniforms.get('iAudioPeak', -1) != -1:
-            GL.glUniform1f(self.uniforms['iAudioPeak'], uniforms.iAudioPeak)
-        if self.uniforms.get('iAudioRMS', -1) != -1:
-            GL.glUniform1f(self.uniforms['iAudioRMS'], uniforms.iAudioRMS)
-        if self.uniforms.get('iAudioCentroid', -1) != -1:
-            GL.glUniform1f(self.uniforms['iAudioCentroid'], uniforms.iAudioCentroid)
-        if self.uniforms.get('iAudioFlux', -1) != -1:
-            GL.glUniform1f(self.uniforms['iAudioFlux'], uniforms.iAudioFlux)
-        if self.uniforms.get('iAudioRolloff', -1) != -1:
-            GL.glUniform1f(self.uniforms['iAudioRolloff'], uniforms.iAudioRolloff)
-        if self.uniforms.get('iAudioBands', -1) != -1:
-            # iAudioBands is a vec4
-            GL.glUniform4f(self.uniforms['iAudioBands'], *uniforms.iAudioBands)
 
         # Update channel textures
         for i, channel in enumerate(uniforms.iChannels):

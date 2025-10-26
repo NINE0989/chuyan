@@ -6,7 +6,10 @@ import logging
 from typing import Optional
 import pyaudiowpatch as pyaudio
 import threading
+import audioUtils
 import os
+
+# 导入音频处理工具函数
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -18,15 +21,9 @@ class AudioSource:
         self.chunk_size = chunk_size
         self.fft_size = fft_size
         self.fft = np.zeros(fft_size, dtype=np.float32)
+        self._spec_smoothed = np.zeros(fft_size, dtype=np.float32)
         # audio feature state
         self.prev_spec = np.zeros(fft_size, dtype=np.float32)
-        self.peak = 0.0
-        self.rms = 0.0
-        self.centroid = 0.0
-        self.flux = 0.0
-        self.rolloff = 0.0
-        # four-band energies: low, low-mid, mid-high, high
-        self.band_energies = np.zeros(4, dtype=np.float32)
         self._audio_buffer = np.zeros(chunk_size, dtype=np.float32)
         # running peak for spectrum normalization (exponential decay)
         self._running_peak = 0.0
@@ -130,84 +127,46 @@ class AudioSource:
                 logger.error(f"Audio read error: {e}")
 
     def update(self):
-        # 取最新音频数据做FFT
+        """更新音频特征 - 只计算FFT频谱"""
+        # 获取最新音频数据
         with self._lock:
             x = self._audio_buffer.copy()
-        # compute raw metrics
+        
         if x.size == 0:
             return
-
-        self.rms = float(np.sqrt(np.mean(x.astype(np.float64) ** 2)))
-        self.peak = float(np.max(np.abs(x)))
-
-        # windowed FFT
-        win = np.hanning(len(x))
-        spec_raw = np.abs(np.fft.rfft(x * win))
-        spec = spec_raw[:self.fft_size].astype(np.float32)
-
-        # spectral centroid
-        freqs = np.fft.rfftfreq(len(x), d=1.0 / float(self.sample_rate))[: self.fft_size]
-        mag = spec.astype(np.float64)
-        mag_sum = float(np.sum(mag) + 1e-12)
-        self.centroid = float(np.sum(freqs * mag) / mag_sum) if mag_sum > 0 else 0.0
-
-        # spectral flux (difference from previous spec)
-        prev = self.prev_spec[: len(spec)] if self.prev_spec is not None else np.zeros_like(spec)
-        self.flux = float(np.sqrt(np.sum((spec.astype(np.float64) - prev.astype(np.float64)) ** 2)))
-        self.prev_spec[: len(spec)] = spec
-
-        # spectral rolloff (frequency at which cumulative energy reaches 85%)
-        cumsum = np.cumsum(mag)
-        roll_thresh = 0.85 * cumsum[-1] if cumsum.size > 0 else 0.0
-        idx = int(np.searchsorted(cumsum, roll_thresh)) if cumsum.size > 0 else 0
-        self.rolloff = float(freqs[min(idx, len(freqs) - 1)]) if freqs.size > 0 else 0.0
-
-        # band energies (simple bands)
-        nyq = float(self.sample_rate) / 2.0
-        bands = [ (20,250), (250,1000), (1000,4000), (4000, nyq) ]
-        band_vals = []
-        for lo, hi in bands:
-            # find indices
-            mask = (freqs >= lo) & (freqs < hi)
-            if np.any(mask):
-                band_energy = float(np.mean(mag[mask]))
-            else:
-                band_energy = 0.0
-            band_vals.append(band_energy)
-        self.band_energies = np.array(band_vals, dtype=np.float32)
-
-        # Running-peak normalization for spectrum:
-        # Update running peak with exponential decay
-        spec_max = np.max(spec)
-        self._running_peak = max(spec_max, self._running_peak * self._peak_decay)
         
-        # Normalize spectrum by running peak (so tex_peak varies with loudness)
-        # When running_peak is very small (near silence), set spectrum to zero
-        # to avoid amplifying noise
-        MIN_PEAK_THRESHOLD = 0.1  # below this, treat as silence
-        if self._running_peak > MIN_PEAK_THRESHOLD:
-            spec_norm = spec / self._running_peak
-        else:
-            # Near silence: scale down proportionally or zero out
-            spec_norm = spec * (self._running_peak / MIN_PEAK_THRESHOLD)
-        self.fft[: len(spec_norm)] = spec_norm
+        # 1. 计算FFT频谱
+        spec = np.fft.fft(x, self.fft_size, axis=0) / self.fft_size * 2
+        
+        # 2. 计算频率数组
+        freqs = np.fft.rfftfreq(len(x), d=1.0 / float(self.sample_rate))[:self.fft_size]
+        
+        # 3. 处理频谱用于可视化
+        spec_processed = audioUtils.process_spectrum_for_visualization(
+            spec=spec,
+            freqs=freqs,
+            prev_smoothed=self._spec_smoothed
+        )
+        
+        # # 保存平滑后的频谱供下次使用
+        self._spec_smoothed = spec_processed
+        
+        spec_processed = spec
+        
+        # 5. 存储最终结果
+        self.fft[:len(spec_processed)] = spec_processed
 
     def get_fft_data(self) -> Optional[np.ndarray]:
         return self.fft
 
     def get_texture_data(self) -> np.ndarray:
+        """
+        返回FFT频谱纹理数据
+        只使用R通道存储频谱
+        """
         arr = np.zeros((1, self.fft_size, 4), dtype=np.float32)
-        # R channel: normalized spectrum (as before)
+        # R channel: normalized spectrum
         arr[0, :, 0] = self.fft
-        # Pack a few scalar audio features into the first texel's other channels:
-        # G: normalized spectral centroid (0..1 relative to Nyquist)
-        # B: RMS (raw)
-        # A: peak (raw)
-        nyq = float(self.sample_rate) / 2.0
-        centroid_norm = float(self.centroid / nyq) if nyq > 0 else 0.0
-        arr[0, 0, 1] = centroid_norm
-        arr[0, 0, 2] = float(self.rms)
-        arr[0, 0, 3] = float(self.peak)
         return arr
 
 

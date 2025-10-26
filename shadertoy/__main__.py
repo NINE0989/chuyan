@@ -13,7 +13,6 @@ from shadertoy.shader import ShaderViewer
 from shadertoy.audio import AudioSource
 from shadertoy.uniforms import ShaderToyUniforms, TextureChannel
 
-
 class ShaderToyApp:
     """Main application class managing uniforms and rendering"""
     def __init__(self, shader_path: str, width: int = 1920, height: int = 480):
@@ -86,21 +85,9 @@ class ShaderToyApp:
         texdata = self.audio.get_texture_data()
         self.uniforms.iChannels[0].data = texdata
         self.uniforms.iChannels[0].time = self.uniforms.iTime
-        # fill audio-related uniforms
+        # fill audio-related uniforms - only sample rate
         try:
             self.uniforms.iSampleRate = float(self.audio.sample_rate)
-            self.uniforms.iAudioPeak = float(self.audio.peak)
-            self.uniforms.iAudioRMS = float(self.audio.rms)
-            # centroid normalized to Nyquist
-            nyq = float(self.audio.sample_rate) / 2.0 if self.audio.sample_rate else 1.0
-            self.uniforms.iAudioCentroid = float(self.audio.centroid / nyq) if nyq > 0 else 0.0
-            self.uniforms.iAudioFlux = float(self.audio.flux)
-            self.uniforms.iAudioRolloff = float(self.audio.rolloff)
-            be = self.audio.band_energies
-            if be is not None and len(be) >= 4:
-                self.uniforms.iAudioBands = (float(be[0]), float(be[1]), float(be[2]), float(be[3]))
-            else:
-                self.uniforms.iAudioBands = (0.0, 0.0, 0.0, 0.0)
         except Exception:
             pass
 
@@ -150,7 +137,7 @@ def main():
             sys.exit(1)
     else:
         # Use default shader
-        default_shader = Path(__file__).parent.parent / "shaders" / "audio_viz.glsl"
+        default_shader = Path(__file__).parent.parent / "shaders" / "ink_wash.glsl"
         if not default_shader.is_file():
             print("No shader file specified and default shader not found.")
             print("Usage: python -m shadertoy [shader_file]")
