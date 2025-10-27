@@ -21,6 +21,14 @@ class ShaderToyApp:
         
         # Setup audio
         self.audio = AudioSource()
+        # Try to start audio capture; if it fails we continue but note the state
+        try:
+            self.audio.start_capture()
+            self._audio_started = True
+            print("[audio] capture started")
+        except Exception as e:
+            self._audio_started = False
+            print(f"[audio] capture not started: {e}")
         
         # Initialize uniforms
         self.uniforms = ShaderToyUniforms()
@@ -74,7 +82,8 @@ class ShaderToyApp:
         
         # Update audio channel
         self.audio.update()
-        self.uniforms.iChannels[0].data = self.audio.get_texture_data()
+        texdata = self.audio.get_texture_data()
+        self.uniforms.iChannels[0].data = texdata
         self.uniforms.iChannels[0].time = self.uniforms.iTime
         # fill audio-related uniforms - only sample rate
         try:
@@ -109,6 +118,12 @@ class ShaderToyApp:
                 self.update_uniforms()
                 self.viewer.render(self.uniforms)
         finally:
+            # Stop audio capture if we started it
+            try:
+                if getattr(self, '_audio_started', False):
+                    self.audio.stop_capture()
+            except Exception:
+                pass
             self.viewer.cleanup()
 
 

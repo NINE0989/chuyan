@@ -1,26 +1,47 @@
-// Simple example fragment shader (ShaderToy-like uniforms)
-// Save other shaders into the `shaders/` folder and load them with the viewer.
+/*
+2D LED Spectrum - Visualiser
+Based on Led Spectrum Analyser by: simesgreen - 27th February, 2013 https://www.shadertoy.com/view/Msl3zr
+2D LED Spectrum by: uNiversal - 27th May, 2015
+Creative Commons Attribution-NonCommercial-ShareAlike 3.0 Unported License.
+*/
 
-#version 330 core
-out vec4 fragColor;
-uniform vec3 iResolution;
-uniform float iTime;
-uniform sampler2D iChannel0; // audio FFT in the red channel
-in vec2 vUV;
+# version 330 core
+#include "ShaderCommon.glsl"
 
-void main(){
-	vec2 uv = vUV;
-	float x = uv.x;
-	float fft = texture(iChannel0, vec2(x, 0.0)).r;
-	float y = uv.y;
-	vec3 col = vec3(0.0);
-	// simple bar-like visualization
-	float h = fft;
-	float bar = smoothstep(h - 0.02, h, y) - smoothstep(h, h + 0.02, y);
-	col = mix(vec3(0.05,0.05,0.12), vec3(0.2,0.7,1.0), bar + 0.2*fft);
-	// add a time-based shimmer
-	col += 0.05*sin(6.2831*(x*4.0 + iTime*0.5))*fft;
-	fragColor = vec4(col, 1.0);
+void mainImage( out vec4 fragColor, in vec2 fragCoord )
+{
+    // create pixel coordinates
+    vec2 uv = fragCoord.xy / iResolution.xy;
+
+    // quantize coordinates
+    const float bands = 30.0;
+    const float segs = 40.0;
+    vec2 p;
+    p.x = floor(uv.x*bands)/bands;
+    p.y = floor(uv.y*segs)/segs;
+
+    // read frequency data from first row of texture
+    float fft  = texture( iChannel0, vec2(p.x,0.0) ).x;
+
+    // led color
+    vec3 color = mix(vec3(0.0, 2.0, 0.0), vec3(2.0, 0.0, 0.0), sqrt(uv.y));
+
+    // mask for bar graph
+    float mask = (p.y < fft) ? 1.0 : 0.1;
+
+    // led shape
+    vec2 d = fract((uv - p) *vec2(bands, segs)) - 0.5;
+    float led = smoothstep(0.5, 0.35, abs(d.x)) *
+                smoothstep(0.5, 0.35, abs(d.y));
+    vec3 ledColor = led*color*mask;
+
+    // output final color
+    fragColor = vec4(ledColor, 1.0);
+}
+
+// Standard main entrypoint
+void main() {
+    mainImage(fragColor, gl_FragCoord.xy);
 }
 
 // Standard main entrypoint

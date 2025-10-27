@@ -1,7 +1,6 @@
 glfw
 PyOpenGL
 numpy
-pyaudio
-sound_device
 pyQt5
 pyqtgraph
+pyaudiowpatch

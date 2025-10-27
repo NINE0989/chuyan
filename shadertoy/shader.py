@@ -8,6 +8,8 @@ from typing import Dict
 import numpy as np
 import glfw
 from OpenGL import GL
+import re
+from pathlib import Path
 
 from .uniforms import ShaderToyUniforms, TextureChannel
 
@@ -66,6 +68,35 @@ class ShaderViewer:
             
         with open(path, 'r', encoding='utf-8') as f:
             fs_src = f.read()
+
+        # Resolve #include directives by inlining the referenced files.
+        # Includes are resolved relative to the shader file's directory.
+        def _resolve_includes(src: str, base_dir: Path, seen: set[str] | None = None) -> str:
+            if seen is None:
+                seen = set()
+            out_lines: list[str] = []
+            for line in src.splitlines():
+                m = re.match(r'^\s*#include\s+"([^"]+)"', line)
+                if m:
+                    inc_name = m.group(1)
+                    inc_path = (base_dir / inc_name).resolve()
+                    inc_key = str(inc_path)
+                    if inc_key in seen:
+                        # already inlined; skip to avoid recursion
+                        continue
+                    if not inc_path.is_file():
+                        raise FileNotFoundError(f"Included shader not found: {inc_path}")
+                    seen.add(inc_key)
+                    inc_text = inc_path.read_text(encoding='utf-8')
+                    # strip any #version directives from included files
+                    inc_text = re.sub(r"^\s*#version.*$", "", inc_text, flags=re.MULTILINE)
+                    inc_text = _resolve_includes(inc_text, inc_path.parent, seen)
+                    out_lines.append(inc_text)
+                else:
+                    out_lines.append(line)
+            return "\n".join(out_lines)
+
+        fs_src = _resolve_includes(fs_src, Path(path).parent)
 
         # Compile shaders
         vs = self._compile_shader(self.VERTEX_SRC, GL.GL_VERTEX_SHADER)
