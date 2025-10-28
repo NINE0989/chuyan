@@ -19,14 +19,16 @@ class AudioSource:
     def __init__(self, sample_rate: int = 44100, chunk_size: int = 4096, fft_size: int = 1024):
         self.sample_rate = sample_rate
         self.chunk_size = chunk_size
+
         self.fft_size = fft_size
-        self.fft = np.zeros(fft_size, dtype=np.float32)
-        self._spec_smoothed = np.zeros(fft_size, dtype=np.float32)
+        self.fft_len = fft_size
+        self.fft = np.zeros(self.fft_len, dtype=np.float32)
+        self._spec_smoothed = np.zeros(self.fft_len, dtype=np.float32)
         # audio feature state
-        self.prev_spec = np.zeros(fft_size, dtype=np.float32)
+        self.prev_spec = np.zeros(self.fft_len, dtype=np.float32)
+        self._running_peak = 0.0  # 用于自适应归一化的运行峰值
         self._audio_buffer = np.zeros(chunk_size, dtype=np.float32)
         # running peak for spectrum normalization (exponential decay)
-        self._running_peak = 0.0
         self._peak_decay = 0.995  # decay factor (closer to 1 = slower decay)
         self._lock = threading.Lock()
         self._thread = None
@@ -135,26 +137,40 @@ class AudioSource:
         if x.size == 0:
             return
         
-        # 1. 计算FFT频谱
-        spec = np.fft.fft(x, self.fft_size, axis=0) / self.fft_size * 2
+        # 1. 计算FFT频谱 (使用fft)
+        win = np.hanning(self.fft_size)
+        padded = np.zeros(self.fft_size)
+        padded[:min(len(x), self.fft_size)] = x[:min(len(x), self.fft_size)]
+        spec = np.fft.fft(padded * win)
         
-        # 2. 计算频率数组
-        freqs = np.fft.rfftfreq(len(x), d=1.0 / float(self.sample_rate))[:self.fft_size]
+        # 2. 计算频率数组 (使用fftfreq)
+        freqs = np.fft.fftfreq(self.fft_size, d=1.0/float(self.sample_rate))
         
         # 3. 处理频谱用于可视化
-        spec_processed = audioUtils.process_spectrum_for_visualization(
+        spec_processed, _, self._running_peak = audioUtils.process_spectrum_for_visualization(
             spec=spec,
             freqs=freqs,
-            prev_smoothed=self._spec_smoothed
+            prev_smoothed=self._spec_smoothed,
+            running_peak=self._running_peak,
+            smoothing=0.8
         )
         
-        # # 保存平滑后的频谱供下次使用
+        # 4. 保存平滑后的频谱供下次使用
         self._spec_smoothed = spec_processed
         
-        spec_processed = spec
-        
-        # 5. 存储最终结果
-        self.fft[:len(spec_processed)] = spec_processed
+        # 5. 将处理后的频谱拷贝到纹理
+        with self._lock:
+            self.fft = spec_processed.copy()
+                
+        # 6. 打印诊断信息
+        buf_peak = np.max(np.abs(x))
+        tex_peak = np.max(self.fft)
+        if hasattr(self, 'frame_count'):
+            self.frame_count += 1
+        else:
+            self.frame_count = 0
+        if self.frame_count % 100 == 0:  # 每100帧打印一次
+            print(f"[audio] frame={self.frame_count} tex_peak={tex_peak:.6f} buf_peak={buf_peak:.6f} running_peak={self._running_peak:.6f}")
 
     def get_fft_data(self) -> Optional[np.ndarray]:
         return self.fft
