@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
     <meta charset="UTF-8">
     <title>PyQt5前端页面</title>
@@ -15,18 +16,21 @@
             flex-direction: column;
             align-items: center;
         }
+
         .container {
             background-color: #fff;
             padding: 30px;
             border-radius: 8px;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
             width: 90%;
             max-width: 600px;
         }
+
         h1 {
             color: #1a73e8;
             text-align: center;
         }
+
         input[type="text"] {
             width: calc(100% - 20px);
             padding: 10px;
@@ -35,6 +39,7 @@
             border-radius: 4px;
             font-size: 16px;
         }
+
         button {
             width: 100%;
             padding: 12px;
@@ -46,9 +51,11 @@
             font-size: 16px;
             transition: background-color 0.3s;
         }
+
         button:hover {
             background-color: #155ab6;
         }
+
         #output {
             margin-top: 20px;
             padding: 15px;
@@ -59,17 +66,51 @@
             font-weight: bold;
             color: #1a73e8;
         }
+
+        #ai-chat-container {
+            margin-top: 30px;
+            width: 100%;
+        }
+
+        #chat-box {
+            height: 150px;
+            border: 1px solid #ccc;
+            background: #fff;
+            padding: 10px;
+            overflow-y: scroll;
+            margin-bottom: 10px;
+        }
+
+        #chat-input {
+            width: calc(100% - 85px);
+            display: inline-block;
+        }
+
+        #chat-send {
+            width: 70px;
+            display: inline-block;
+        }
     </style>
 </head>
+
 <body>
     <div class="container">
-        <h1>PyQt5 与 JavaScript 交互</h1>
-        
+        <h1>控制面板</h1>
+
         <div id="shader-list">
             <!-- Shader list will be populated by JavaScript -->
         </div>
-        
+
+        <button id="apply-button" style="margin-top: 15px; background-color: #28a745;">应用到独立窗口</button>
+
         <div id="output">这里将显示来自Python的响应</div>
+
+        <div id="ai-chat-container" style="margin-top: 30px; width: 100%;">
+            <h2>AI 助手</h2>
+            <div id="chat-box" style="height: 150px; border: 1px solid #ccc; background: #fff; padding: 10px; overflow-y: scroll; margin-bottom: 10px;"></div>
+            <input type="text" id="chat-input" placeholder="在这里输入..." style="width: calc(100% - 85px); display: inline-block;">
+            <button id="chat-send" style="width: 70px; display: inline-block;">发送</button>
+        </div>
     </div>
 
     <script>
@@ -91,14 +132,40 @@
             });
         }
 
-        document.addEventListener("DOMContentLoaded", function() {
-            new QWebChannel(qt.webChannelTransport, function(channel) {
+        document.addEventListener("DOMContentLoaded", function () {
+            new QWebChannel(qt.webChannelTransport, function (channel) {
                 window.backend = channel.objects.backend;
-                
-                // Request the shader list from the backend once the channel is ready
+
                 if (window.backend) {
+                    // Request the shader list from the backend
                     window.backend.request_shader_list();
                 }
+
+                // --- 新增功能绑定 ---
+
+                // 绑定 "Apply" 按钮
+                document.getElementById('apply-button').onclick = () => {
+                    if (window.backend) {
+                        console.log("Apply button clicked");
+                        window.backend.on_apply_clicked();
+                    }
+                };
+
+                // 绑定 AI 对话框的发送按钮
+                document.getElementById('chat-send').onclick = () => {
+                    const input = document.getElementById('chat-input');
+                    const message = input.value;
+                    if (message.trim() !== '' && window.backend) {
+                        console.log(`Sending message to AI: ${message}`);
+                        window.backend.on_chat_message_sent(message);
+
+                        // 在聊天框中显示用户消息
+                        const chatBox = document.getElementById('chat-box');
+                        chatBox.innerHTML += `<div style="text-align: right; color: blue;"><b>你:</b> ${message}</div>`;
+                        input.value = '';
+                        chatBox.scrollTop = chatBox.scrollHeight;
+                    }
+                };
             });
         });
 
@@ -108,6 +175,14 @@
             console.log("Python called JavaScript: update_text('" + message + "')");
             outputDiv.textContent = message;
         }
+
+        // 新增一个由Python调用的函数，用于在聊天框显示AI的回复
+        function add_ai_message(message) {
+            const chatBox = document.getElementById('chat-box');
+            chatBox.innerHTML += `<div style="text-align: left; color: green;"><b>AI:</b> ${message}</div>`;
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
     </script>
 </body>
+
 </html>

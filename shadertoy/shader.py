@@ -27,7 +27,7 @@ class ShaderViewer:
     }
     '''
 
-    def __init__(self, width: int = 1920, height: int = 480, title: str = 'ShaderToy-like Viewer'):
+    def __init__(self, width: int = 1920, height: int = 480, title: str = 'ShaderToy-like Viewer', borderless: bool = False):
         if not glfw.init():
             raise RuntimeError('glfw.init() failed')
 
@@ -35,6 +35,10 @@ class ShaderViewer:
         glfw.window_hint(glfw.CONTEXT_VERSION_MAJOR, 3)
         glfw.window_hint(glfw.CONTEXT_VERSION_MINOR, 3)
         glfw.window_hint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE)
+        
+        if borderless:
+            glfw.window_hint(glfw.DECORATED, glfw.FALSE)
+
         self.window = glfw.create_window(width, height, title, None, None)
         if not self.window:
             glfw.terminate()

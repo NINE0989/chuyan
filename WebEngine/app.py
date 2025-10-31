@@ -5,9 +5,8 @@ import os
 import sys
 import traceback
 from pathlib import Path
+import multiprocessing
 
-import numpy as np
-import OpenGL.GL as GL
 from PyQt5.QtCore import QObject, pyqtSlot, QUrl, QThread, pyqtSignal, Qt
 from PyQt5.QtWebChannel import QWebChannel
 from PyQt5.QtWebEngineWidgets import QWebEngineView
@@ -20,6 +19,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from shadertoy.audio import AudioSource
 from WebEngine.visualizer import VisualizerWidget
+from shadertoy.__main__ import ShaderToyApp
 
 # Get the directory of the current script
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -99,6 +99,48 @@ class Backend(QObject):
         except Exception as e:
             print(f"[Backend] Error getting shader list: {e}")
 
+    @pyqtSlot()
+    def on_apply_clicked(self):
+        """
+        处理 'Apply' 按钮点击事件，在一个新进程中启动无边框窗口。
+        """
+        if not self.main_window.current_shader_path:
+            print("[Backend] No shader selected to apply.")
+            return
+        
+        print(f"[Backend] Applying shader '{self.main_window.current_shader_path}' to borderless window.")
+        
+        # 使用多进程以避免阻塞PyQt事件循环和处理OpenGL上下文冲突
+        p = multiprocessing.Process(
+            target=run_shader_viewer, 
+            args=(self.main_window.current_shader_path, 1280, 200) #可以自定义分辨率
+        )
+        p.start()
+        # 我们不调用 p.join()，让它成为一个独立的窗口
+
+    @pyqtSlot(str)
+    def on_chat_message_sent(self, message: str):
+        """处理从前端发送的聊天消息 (占位符)"""
+        print(f"[Backend] Chat message received: {message}")
+        
+        # 模拟AI回复
+        reply = f"我已经收到你的消息 '{message}'。但我还没有真正的智能。"
+        self.main_window.web_view.page().runJavaScript(f"add_ai_message('{reply}')")
+
+def run_shader_viewer(shader_path, width, height):
+    """
+    在一个独立的进程中运行基于GLFW的无边框ShaderViewer。
+    直接调用 shadertoy.__main__ 中的 ShaderToyApp。
+    """
+    try:
+        # 创建 ShaderToyApp 实例，并请求无边框窗口
+        app = ShaderToyApp(shader_path, width, height, borderless=True)
+        # 运行主循环
+        app.run()
+    except Exception as e:
+        print(f"[ShaderViewerProcess] Error: {e}")
+        traceback.print_exc()
+
 class MainWindow(QMainWindow):
     """
     The main application window, containing the visualizer and control panel.
@@ -107,6 +149,8 @@ class MainWindow(QMainWindow):
         super().__init__(parent)
         self.setWindowTitle("Real-time Audio Visualizer")
         self.setGeometry(100, 100, 1280, 720)
+        self.current_shader_path = None # 用于存储当前选择的着色器路径
+        self.shader_viewer_process = None # 用于跟踪独立窗口进程
 
         # --- Central Widget and Layout ---
         main_widget = QWidget()
@@ -139,8 +183,14 @@ class MainWindow(QMainWindow):
         self.audio_thread.newData.connect(self.update_audio_texture)
         
         # --- Connect signals for safe initialization ---
-        self.backend.shaderChanged.connect(self.visualizer.load_shader)
+        self.backend.shaderChanged.connect(self.on_shader_changed)
         self.visualizer.initialized.connect(self.on_visualizer_initialized)
+
+    @pyqtSlot(str)
+    def on_shader_changed(self, shader_path: str):
+        """当着色器改变时，加载它并存储路径"""
+        self.current_shader_path = shader_path
+        self.visualizer.load_shader(shader_path)
 
     @pyqtSlot()
     def on_visualizer_initialized(self):
@@ -155,7 +205,7 @@ class MainWindow(QMainWindow):
         # Load initial shader
         initial_shader = os.path.join(SHADER_DIR, "test.glsl")
         if os.path.exists(initial_shader):
-            self.visualizer.load_shader(initial_shader)
+            self.on_shader_changed(initial_shader) # 使用新的槽来加载
         else:
             print(f"Warning: Initial shader '{initial_shader}' not found.")
 
@@ -168,9 +218,12 @@ class MainWindow(QMainWindow):
         self.visualizer.update_channel_texture_data(0, texture_data)
 
     def closeEvent(self, event):
-        """Ensures the audio thread is stopped cleanly on exit."""
+        """Ensures threads and processes are stopped cleanly on exit."""
         print("[MainWindow] Closing application...")
         self.audio_thread.stop()
+        # 如果需要，可以在这里终止独立窗口进程
+        if self.shader_viewer_process and self.shader_viewer_process.is_alive():
+            self.shader_viewer_process.terminate()
         event.accept()
 
 def main():
