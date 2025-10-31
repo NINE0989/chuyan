@@ -15,8 +15,8 @@ from shadertoy.uniforms import ShaderToyUniforms, TextureChannel
 
 class ShaderToyApp:
     """Main application class managing uniforms and rendering"""
-    def __init__(self, shader_path: str, width: int = 1920, height: int = 480, borderless: bool = False):
-        self.viewer = ShaderViewer(width, height, borderless=borderless)
+    def __init__(self, shader_path: str, width: int = 1920, height: int = 480):
+        self.viewer = ShaderViewer(width, height)
         self.viewer.load_shader(shader_path)
         
         # Setup audio
