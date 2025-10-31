@@ -6,8 +6,9 @@ import logging
 from typing import Optional
 import pyaudiowpatch as pyaudio
 import threading
-import audioUtils
-import os
+
+# Local imports for audio processing functions
+from . import audioUtils
 
 # 导入音频处理工具函数
 
