@@ -1,0 +1,104 @@
+你是一位精通 GLSL 与 Shadertoy 的图形程序员。现在请为我的 Python Shadertoy 运行环境生成一段可直接运行的音频响应式片元着色器（GLSL），务必严格遵循以下规范：
+
+输出格式要求（必须）：
+- 只输出纯粹的 GLSL 源码文本（plain GLSL source）。不要包含任何 Markdown fenced code block（```）、反引号（`）或其它包裹/标记；也不要在输出外添加任何说明性文字或元数据。接收端会把该文本直接写入 `.glsl` 文件并编译。
+- 不允许在源码中包含反引号字符（`）；如果需要在注释中标注样式标签，请只使用常规注释符号 `//` 并确保不包含任何 Markdown 标记。
+- 代码必须自包含，不允许使用 `#include` 或引用外部文件。
+- 不要包含网络请求、文件读写或与运行时不兼容的扩展指令。
+- 为兼容性，**同时实现** Shadertoy 风格入口与桌面入口：
+  - 必须包含函数： `void mainImage(out vec4 fragColor, in vec2 fragCoord)` （主逻辑）。
+  - 还必须包含一个标准适配器 `void main()`（调用 `mainImage` 并使用 `gl_FragCoord.xy` 作为 fragCoord），以避免缺少 `main()` 的编译错误。
+- 不要在代码中输出任何“省略”或“简写”注释；代码必须为可直接编译的完整实现（可有少量内联注释但不要解释性文字块）。
+
+运行时约定（必须声明并使用）：
+- Uniforms（在代码顶部显式声明）：
+  uniform vec3 iResolution;
+  uniform float iTime;
+  uniform sampler2D iChannel0;
+ - 音频纹理约定：`iChannel0` 是一个 512x2 的纹理；请用第一行（y = 0.0）作为频谱 (FFT) 数据访问方式：
+  - 为兼容不同 GLSL 版本，请使用下文推荐的采样宏 `TEX(sampler, uv)`（见兼容性段落），例如： `float spectrum = TEX(iChannel0, vec2(u, 0.0)).r;` 其中 `u` ∈ [0.0, 1.0] 表示频率（低到高）。
+- 请尽量避免在 hot-loop 中重复对 `iChannel0` 做大量采样（在循环前采样或用纹理索引/缓存减少采样次数）。
+
+视觉/交互规格（效果与响应映射）：
+- 风格要求（更新）：主体纹样必须具有清晰、锐利的边缘（硬边轮廓或经受控的抗锯齿），背景必须严格为纯黑（vec3(0.0)），禁止在背景中混入任何噪点、杂色或低幅度抖动。任何噪声/FBM 仅能用于受音频驱动的“主体区域”细节，且必须用显式掩码（edge/shape mask）把噪声限制在主体内。整体视觉应高对比、边缘分明，避免整个画面出现低对比的杂色。
+- 用户描述（输入变量与占位符）：模板现在使用占位符 `横向的线，从左到右，随着音乐起伏，艺术化展现傅里叶频谱，并有丰富的颜色变化` 来接收调用方注入的文本（例如来自脚本的用户说明或关键词）。LLM 应分析 `横向的线，从左到右，随着音乐起伏，艺术化展现傅里叶频谱，并有丰富的颜色变化` 并将其映射到视觉参数（例如色调、粒子密度、运动节奏、形态选择等），但不得在输出中以文字形式解释该映射——请把映射結果直接体现在着色器实现与默认参数上（可通过一个极短的一行注释內标注所选風格标签，注释长度建議極短）。
+- 边缘与掩码要求（新增硬性规范）：
+  - 着色器应定义并使用一个或多个显式 mask/edge 函数（例如 `shapeMask(vec2 p)` / `edgeMask(float v, float thresh)`），用于生成主体轮廓。主体颜色仅在 mask>threshold 区域内绘制；mask≤threshold 的像素必须输出纯黑（vec3(0.0)）。
+  - 对于需要平滑边缘的元素，优先使用稳定的屏幕空间抗锯齿（例如在 mask 周围应用有限宽度的 smoothstep）并确保边界不会引入可见噪点；不要用随机扰动作为边界决定因素。
+  - 禁止在全局合成阶段对画面做小幅叠加噪声或抖动（例如 dithering、微量 FBM 叠加在全画面亮度上）。任何 glow/bloom、blur 等效果必须只影响已掩码出的主体像素，不得把少量亮度泄漏到纯黑背景上。
+- 视效参考与偏好（基于 `shaders.shader_db` 的高分样例总结）：
+  - 优先风格（按你在数据库中给出较高 art_score 的偏好）：
+    - RGB chromatic separation / subtle rgb-shift（仅在主体边缘或轮廓处使用以强调边界）；
+    - Radial / rings / lowpoly 结构（用于中心辐射或节拍触发的形状，优先使用明确的几何掩码）；
+    - 尽量避免高成本的深度 raymarch 或需大量步进的 3D marching（除非显式要求并在 #define 中限制迭代）。
+  - 解释性指导（LLM 可据此优先实现）：将低频（bass）映射为“nebula/主体 尺寸/核心亮度与缓慢旋转”，中频（mid）用于“主体内局部细节/纹理抖动”（必须受掩码限制），高频（treble）用于“粒子生成率/速度/运动锐度”，总体音量控制 glow/bloom 强度（但 bloom 仅限主体区域，背景保持纯黑）。
+
+- 推荐的轻量可复用实现函数/算法库（请在输出着色器内部实现并调用）：
+  - hash(vec2 p) / hash12(vec2 p)
+  - rotate2D(vec2 uv, float a)：二维旋转矩阵。
+  - noise2D(vec2 p) / fbm(vec2 p, float z)：基于 Perlin/Classic noise 的 FBM，用于 nebula 密度与细节。
+  - guardedTexelFetch(sampler2D s, int idx, int width)：安全采样频谱的封装，做边界 clamp 并返回 float 强度。
+  - spawnParticle(inout Particle p, vec2 seed, float energy)：简短描述的伪函数（示例应使用固定数组与迭代上限 #define MAX_PARTICLES）。
+  - rgbShift(vec3 col, float amount)：基于 uv 偏移采样或通道位移的色差实现（轻量近似，不做额外纹理采样时可通过三次合成实现）。
+  - screenGlow(vec3 col, float intensity)：屏幕空间近似 glow（使用多次叠加与软阈值，而非昂贵的模糊卷积）。
+
+  说明：以上函数名只是建议，LLM 输出的着色器应把这些函数以紧凑、安全（护栏）实现放在同一文件；必要时只保留最小实现版本以节省计算量。
+
+- 频率分区建议（实现时可按下列映射）：
+  - bass: u < 0.20 → 控制 nebula size / core brightness；
+  - mid: 0.20 ≤ u ≤ 0.50 → 可用于细节/纹理抖动；
+  - treble: u > 0.50 → 控制 particle spawn rate / speed；
+  - overall volume: aggregate 多频段平均值，控制 glow/bloom 强度。
+
+兼容性与编译友好建议（必须遵守）：
+- 明确禁止使用反引号（`）或将源码包在 Markdown fenced block 中；上游编译器会把这些字符当作非法。输出必须为干净的 GLSL 源码文件。
+- 建议在着色器顶部包含下面的简短可移植兼容宏（LLM 在生成代码时应直接把这段 boilerplate 写入着色器文件并使用 `TEX()` 来替代直接调用 `texture()`）：
+
+  // Compatibility boilerplate (include and use TEX(sampler, uv) for texture sampling)
+  #ifdef GL_ES
+  precision mediump float;
+  #endif
+
+  #ifndef TEX
+  #ifdef GL_ES
+  #define TEX(s, uv) texture2D(s, uv)
+  #else
+  #define TEX(s, uv) texture(s, uv)
+  #endif
+  #endif
+
+  说明：使用以上 `TEX` 宏可以避免在不同 GLSL 版本（WebGL / Shadertoy / Desktop）中出现 `texture` / `texture2D` 不可用的问题。
+
+ - 关于输出入口：请同时实现 `mainImage(out vec4 fragColor, in vec2 fragCoord)` 并实现一个兼容的 `main()` 适配器；`main()` 应在 GL ES 环境下把结果写入 `gl_FragColor`，在桌面 GL3.3 环境下写入声明的 `out vec4 fragColor`。可以通过预处理宏区分：
+
+  #ifdef GL_ES
+    // use gl_FragColor
+  #else
+    out vec4 fragColor;
+  #endif
+
+  并在 `main()` 内把 `vec4 result` 赋回到正确的目标。
+
+ - 如果你必须添加 `#version`，请只在非常必要时加入并使用与目标环境兼容的版本（例如 `#version 330`），但默认请不要包含 `#version`，因为某些运行时（如 Shadertoy）不允许或自动处理版本。
+
+备注（不改变原有约束）：请在最终着色器文件中只保留最多一行简短注释（效果名称与极短标签），其余所有实现函数必须在同一文件中定义。不要改变本模板对 uniforms、采样约定或 #define 配置的其它要求。
+
+性能与可配置性（必须使用 #define）：
+- 请用 `#define` 暴露这些关键参数（并设合理默认值）：
+  - MAX_PARTICLES（建议 ≤ 256）
+  - PARTICLE_ITERATIONS（建议 ≤ 64）
+  - NEBULA_OCTAVES（建议 ≤ 4）
+  - GLOW_INTENSITY 默认值
+- 总体要求：避免深度 raymarch、避免每像素大量循环；在粒子循环中使用固定上限迭代（不可依赖动态未定的循环次数）。
+
+实现风格与健壮性要求：
+- 所有辅助函数（noise、hash、旋转矩阵等）必须包含在同一文件内部。
+- 请对除法/指数等可能导致 NaN/Inf 的操作做护栏（如使用 clamp、max(abs(x), 1e-6)）。
+- 请避免使用 `#version`，如果必须使用 `#version` 请使用与目标运行器兼容的版本；默认不加 `#version`。
+- 代码应尽量兼容桌面 GL 3.3（GLSL 330）和 Shadertoy 风格输入；不要使用高级扩展或 compute shader 特性。
+
+可选（但推荐）：
+- 在代码最顶端保留一行简短注释（单行），包含：效果名称、作者（AI）与简短一行说明（例如：// Nebula audio viz — mainImage + main adapter）。若你需要后续自动化抽取纯代码，请仅保留最多一行注释。
+
+最终产出（必须）：
+- 一个可编译、可运行的完整 GLSL 片元着色器，满足以上所有要求，并把 `mainImage` 做为逻辑入口，同时实现 `main()` 适配器。关键参数用 `#define` 暴露，且注释最少。输出必须为纯 GLSL 源码文本（无 Markdown fenced block、无反引号）。
