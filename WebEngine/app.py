@@ -1,237 +1,400 @@
-"""
-Main application entry point for the PyQt5-based audio visualizer.
-"""
-import os
 import sys
-import traceback
+import os
+import time
 from pathlib import Path
-import multiprocessing
+from PyQt5.QtWidgets import (
+    QApplication, QMainWindow, QWidget, QPushButton, QLabel,
+    QVBoxLayout, QHBoxLayout, QStackedWidget, QFrame,
+    QTextEdit, QLineEdit, QSizePolicy, QScrollArea, QGridLayout
+)
+from PyQt5.QtCore import Qt, QDate
+from PyQt5.QtGui import QPixmap, QFont
 
-from PyQt5.QtCore import QObject, pyqtSlot, QUrl, QThread, pyqtSignal, Qt
-from PyQt5.QtWebChannel import QWebChannel
-from PyQt5.QtWebEngineWidgets import QWebEngineView
-from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
-                             QHBoxLayout, QSplitter, QFileDialog, QListWidget,
-                             QListWidgetItem)
+# 路径：项目根目录下的 shaders 文件夹
+SHADERS_DIR = (Path(__file__).resolve().parent.parent / "shaders").as_posix()
+os.makedirs(SHADERS_DIR, exist_ok=True)
 
-# Add project root to Python path
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from shadertoy.audio import AudioSource
-from WebEngine.visualizer import VisualizerWidget
-from shadertoy.__main__ import ShaderToyApp
+class ChatBubble(QFrame):
+    """简单的左右对齐聊天气泡"""
+    def __init__(self, text, is_user=False):
+        super().__init__()
+        self.setStyleSheet("border: none;")
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(10, 5, 10, 5)
 
-# Get the directory of the current script
-CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-SHADER_DIR = os.path.join(Path(CURRENT_DIR).parent, "shaders")
-
-class AudioThread(QThread):
-    """
-    Runs audio capture and FFT processing in a separate thread.
-    Emits the raw texture data for the visualizer.
-    """
-    newData = pyqtSignal(object)
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.audio = None
-        self.is_running = False
-
-    def run(self):
-        try:
-            self.audio = AudioSource()
-            self.audio.start_capture()
-            self.is_running = True
-            print("[AudioThread] Audio capture started.")
-        except Exception as e:
-            print(f"[AudioThread] Error starting audio capture: {e}")
-            traceback.print_exc()
-            self.is_running = False
-            return
-
-        while self.is_running:
-            try:
-                self.audio.update()
-                texture_data = self.audio.get_texture_data()
-                if texture_data is not None:
-                    self.newData.emit(texture_data)
-            except Exception as e:
-                print(f"[AudioThread] Error during update: {e}")
-            self.msleep(10) # ~100 FPS update rate, adjust as needed
-
-    def stop(self):
-        print("[AudioThread] Stopping...")
-        self.is_running = False
-        if self.audio:
-            self.audio.stop_capture()
-        self.wait()
-        print("[AudioThread] Stopped.")
-
-class Backend(QObject):
-    """
-    Backend object for JavaScript communication.
-    Handles interactions from the web UI.
-    """
-    shaderChanged = pyqtSignal(str)
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.main_window = parent
-
-    @pyqtSlot(str)
-    def on_shader_selected(self, shader_name):
-        """Called when a shader is selected in the web UI."""
-        print(f"[Backend] Shader selected from web UI: {shader_name}")
-        shader_path = os.path.join(SHADER_DIR, shader_name)
-        if os.path.exists(shader_path):
-            self.shaderChanged.emit(shader_path)
+        avatar = QLabel("😎" if is_user else "AI")
+        avatar.setAlignment(Qt.AlignCenter)
+        avatar.setFixedSize(40, 40)
+        if is_user:
+            avatar.setStyleSheet("""
+                QLabel { font-size: 22px; }
+            """)
         else:
-            print(f"[Backend] Error: Shader file not found at '{shader_path}'")
-    
-    @pyqtSlot()
-    def request_shader_list(self):
-        """Scans the shader directory and sends the list to the frontend."""
-        try:
-            shaders = [f for f in os.listdir(SHADER_DIR) if f.endswith(('.glsl', '.frag'))]
-            print(f"[Backend] Found shaders: {shaders}")
-            # Call the JavaScript function to populate the UI
-            self.main_window.web_view.page().runJavaScript(f"setShaderList({shaders})")
-        except Exception as e:
-            print(f"[Backend] Error getting shader list: {e}")
+            avatar.setStyleSheet("""
+                QLabel { background-color: #1c1c1c; color: white; border-radius: 20px; font-size: 16px; }
+            """)
 
-    @pyqtSlot()
-    def on_apply_clicked(self):
-        """
-        处理 'Apply' 按钮点击事件，在一个新进程中启动无边框窗口。
-        """
-        if not self.main_window.current_shader_path:
-            print("[Backend] No shader selected to apply.")
+        bubble_color = "#bfbfbf" if is_user else "#efefef"
+        bubble = QLabel(text)
+        bubble.setWordWrap(True)
+        bubble.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        bubble.setStyleSheet(f"""
+            background-color: {bubble_color};
+            border-radius: 12px;
+            padding: 10px 14px;
+            font-size: 14px;
+            max-width: 280px;
+        """)
+
+        if is_user:
+            layout.addStretch()
+            layout.addWidget(bubble)
+            layout.addWidget(avatar)
+        else:
+            layout.addWidget(avatar)
+            layout.addWidget(bubble)
+            layout.addStretch()
+
+
+class MainPage(QWidget):
+    """主界面：聊天 + Shader 预览 + 代码显示"""
+    def __init__(self, switch_to_shader, shader_library):
+        super().__init__()
+        self.switch_to_shader = switch_to_shader
+        self.shader_library = shader_library
+        self.current_shader = "// GLSL shader code will appear here"
+        self.initUI()
+
+    def initUI(self):
+        top_bar = QFrame()
+        top_bar.setStyleSheet("background-color: #2b6dad; color: white;")
+        top_bar.setFixedHeight(60)
+
+        title = QLabel("NAME")
+        title.setFont(QFont("Arial", 14))
+        title.setStyleSheet("color: white;")
+
+        btn_shader = QPushButton("Shader库")
+        btn_shader.setStyleSheet("""
+            QPushButton { background-color: white; color: #2b6dad; font-weight: bold; padding: 6px 12px; border-radius: 8px; }
+            QPushButton:hover { background-color: #e0e0e0; }
+        """)
+        btn_shader.clicked.connect(self.switch_to_shader)
+
+        top_layout = QHBoxLayout()
+        top_layout.addWidget(QLabel("😎"))
+        top_layout.addWidget(title)
+        top_layout.addStretch()
+        top_layout.addWidget(btn_shader)
+        top_bar.setLayout(top_layout)
+
+        main_layout = QHBoxLayout()
+        main_layout.setContentsMargins(0, 0, 0, 0)
+
+        chat_area = QVBoxLayout()
+        chat_area.setContentsMargins(15, 15, 15, 15)
+
+        self.chat_scroll = QScrollArea()
+        self.chat_scroll.setWidgetResizable(True)
+        self.chat_widget = QWidget()
+        self.chat_layout = QVBoxLayout(self.chat_widget)
+        self.chat_layout.addStretch()
+        self.chat_scroll.setWidget(self.chat_widget)
+        self.chat_scroll.setStyleSheet("background-color: #d9d9d9; border-radius: 8px;")
+
+        chat_area.addWidget(self.chat_scroll, 1)
+
+        input_layout = QHBoxLayout()
+        self.input_box = QLineEdit()
+        self.input_box.setPlaceholderText("请输入您的需求……")
+        self.input_box.setStyleSheet("""
+            QLineEdit { background-color: white; border: none; border-radius: 6px; padding: 8px; font-size: 14px; }
+        """)
+        send_btn = QPushButton("发送")
+        send_btn.setStyleSheet("""
+            QPushButton { background-color: #1c1c1c; color: white; border-radius: 4px; padding: 8px 16px; }
+            QPushButton:hover { background-color: #333333; }
+        """)
+        send_btn.clicked.connect(self.send_message)
+
+        input_layout.addWidget(self.input_box, 1)
+        input_layout.addWidget(send_btn)
+        chat_area.addLayout(input_layout)
+
+        right_panel = QVBoxLayout()
+        right_panel.setContentsMargins(10, 15, 15, 15)
+        right_panel.setSpacing(10)
+
+        self.shader_container = QFrame()
+        self.shader_container.setStyleSheet("""
+            QFrame { background-color: #e0e0e0; border-radius: 8px; }
+        """)
+        self.shader_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.shader_container.setFixedHeight(360)
+
+        shader_layout = QVBoxLayout(self.shader_container)
+        shader_layout.setContentsMargins(0, 0, 0, 0)
+        shader_layout.setSpacing(0)
+
+        self.shader_display = QLabel("🎞️")
+        self.shader_display.setAlignment(Qt.AlignCenter)
+        self.shader_display.setStyleSheet("font-size: 40px; color: #bfbfbf;")
+        shader_layout.addWidget(self.shader_display, 1)
+
+        shader_bottom_bar = QFrame()
+        shader_bottom_bar.setStyleSheet("background-color: #2b6dad; border-radius: 0 0 8px 8px;")
+        shader_bottom_bar.setFixedHeight(50)
+
+        bottom_bar_layout = QHBoxLayout(shader_bottom_bar)
+        bottom_bar_layout.setContentsMargins(10, 0, 10, 0)
+
+        self.heart_label = QPushButton("♡")
+        self.heart_label.setStyleSheet("""
+            QPushButton { color: white; font-size: 22px; background: transparent; border: none; }
+        """)
+        self.heart_label.clicked.connect(self.toggle_favorite)
+        bottom_bar_layout.addWidget(self.heart_label)
+        bottom_bar_layout.addStretch()
+
+        self.apply_btn = QPushButton("应用")
+        self.apply_btn.setFixedSize(80, 30)
+        self.apply_btn.setStyleSheet("""
+            QPushButton { background-color: #1c1c1c; color: white; border-radius: 12px; font-weight: bold; }
+            QPushButton:hover { background-color: #333333; }
+        """)
+        self.apply_btn.clicked.connect(self.apply_shader)
+        bottom_bar_layout.addWidget(self.apply_btn)
+        shader_layout.addWidget(shader_bottom_bar)
+
+        self.code_preview = QTextEdit()
+        self.code_preview.setReadOnly(True)
+        self.code_preview.setStyleSheet("""
+            QTextEdit { background-color: black; color: white; font-family: Consolas; font-size: 13px; border-radius: 8px; }
+        """)
+        self.code_preview.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
+        right_panel.addWidget(self.shader_container)
+        right_panel.addWidget(self.code_preview)
+
+        main_layout.addLayout(chat_area, 2)
+        main_layout.addLayout(right_panel, 3)
+
+        layout = QVBoxLayout()
+        layout.addWidget(top_bar)
+        layout.addLayout(main_layout)
+        self.setLayout(layout)
+
+    def send_message(self):
+        text = self.input_box.text().strip()
+        if not text:
             return
-        
-        print(f"[Backend] Applying shader '{self.main_window.current_shader_path}' to borderless window.")
-        
-        # 使用多进程以避免阻塞PyQt事件循环和处理OpenGL上下文冲突
-        p = multiprocessing.Process(
-            target=run_shader_viewer, 
-            args=(self.main_window.current_shader_path, 1280, 200) #可以自定义分辨率
-        )
-        p.start()
-        # 我们不调用 p.join()，让它成为一个独立的窗口
+        self.chat_layout.insertWidget(self.chat_layout.count() - 1, ChatBubble(text, is_user=True))
+        self.input_box.clear()
+        ai_reply = "这是一个示例 GLSL Shader 代码。"
+        self.chat_layout.insertWidget(self.chat_layout.count() - 1, ChatBubble(ai_reply))
+        self.current_shader = """void setup() {
+    // put your setup code here, to run once:
+}
 
-    @pyqtSlot(str)
-    def on_chat_message_sent(self, message: str):
-        """处理从前端发送的聊天消息 (占位符)"""
-        print(f"[Backend] Chat message received: {message}")
-        
-        # 模拟AI回复
-        reply = f"我已经收到你的消息 '{message}'。但我还没有真正的智能。"
-        self.main_window.web_view.page().runJavaScript(f"add_ai_message('{reply}')")
+void loop() {
+    // put your main code here, to run repeatedly:
+}"""
+        self.shader_display.setText("🌀")
 
-def run_shader_viewer(shader_path, width, height):
-    """
-    在一个独立的进程中运行基于GLFW的无边框ShaderViewer。
-    直接调用 shadertoy.__main__ 中的 ShaderToyApp。
-    """
-    try:
-        # 创建 ShaderToyApp 实例，并请求无边框窗口
-        app = ShaderToyApp(shader_path, width, height, borderless=True)
-        # 运行主循环
-        app.run()
-    except Exception as e:
-        print(f"[ShaderViewerProcess] Error: {e}")
-        traceback.print_exc()
+    def apply_shader(self):
+        self.code_preview.setText(self.current_shader)
+
+    def toggle_favorite(self):
+        """收藏当前 Shader：写入到 shaders 目录，并标记收藏。
+
+        命名规则：fav_<时间戳>.glsl 例如 fav_20251104_142530.glsl
+        如果代码第一行包含形如 // name: xxx 则使用 xxx 作为基础文件名（去空格、非法字符）。
+        不执行取消收藏时的删除操作，避免误删。再次点击只切换图标。
+        """
+        if self.heart_label.text() == "♡":
+            # 切换 UI 状态
+            self.heart_label.setText("❤️")
+
+            # 解析可选名称
+            first_line = self.current_shader.strip().splitlines()[0] if self.current_shader.strip().splitlines() else ""
+            base_name = None
+            if first_line.startswith("//") and ":" in first_line:
+                # 例如 // name: MyShader
+                parts = first_line[2:].strip().split(":", 1)
+                if len(parts) == 2 and parts[0].lower().strip() == "name":
+                    candidate = parts[1].strip()
+                    # 过滤非法文件名字符
+                    base_name = "".join(ch for ch in candidate if ch.isalnum() or ch in ('_','-')) or None
+            if not base_name:
+                base_name = time.strftime("fav_%Y%m%d_%H%M%S")
+
+            filename = f"{base_name}.glsl"
+            target_path = os.path.join(SHADERS_DIR, filename)
+            # 若已存在则附加序号
+            counter = 1
+            stem, ext = os.path.splitext(filename)
+            while os.path.exists(target_path):
+                target_path = os.path.join(SHADERS_DIR, f"{stem}_{counter}{ext}")
+                counter += 1
+            try:
+                with open(target_path, "w", encoding="utf-8") as f:
+                    f.write(self.current_shader if self.current_shader.endswith("\n") else self.current_shader + "\n")
+                # 记录到内存收藏列表（存文件路径或名称）
+                self.shader_library.append(target_path)
+            except Exception as e:
+                # 失败则回退图标
+                self.heart_label.setText("♡")
+                print(f"[Favorite] 保存失败: {e}")
+        else:
+            # 这里只切换显示，不删除文件
+            # TODO: 添加删除功能
+            self.heart_label.setText("♡")
+
+
+class ShaderPage(QWidget):
+    """展示 shaders 目录下所有 .glsl / .frag 文件，并显示收藏文件。"""
+    def __init__(self, switch_to_main, shader_library):
+        super().__init__()
+        self.switch_to_main = switch_to_main
+        self.shader_library = shader_library  # 仍保留：可用于后续标识收藏
+        self.initUI()
+
+    def initUI(self):
+        top_bar = QFrame()
+        top_bar.setStyleSheet("background-color: #2b6dad; color: white;")
+        top_bar.setFixedHeight(60)
+
+        title = QLabel("Shader库")
+        title.setFont(QFont("Arial", 14, QFont.Bold))
+        title.setStyleSheet("color: white; margin-left: 10px;")
+
+        btn_close = QPushButton("×")
+        btn_close.setStyleSheet("""
+            QPushButton { background-color: white; color: #2b6dad; font-weight: bold; padding: 6px 12px; border-radius: 8px; }
+            QPushButton:hover { background-color: #e0e0e0; }
+        """)
+        btn_close.clicked.connect(self.switch_to_main)
+
+        top_layout = QHBoxLayout()
+        top_layout.addWidget(title)
+        top_layout.addStretch()
+        top_layout.addWidget(btn_close)
+        top_layout.setContentsMargins(10, 0, 10, 0)
+        top_bar.setLayout(top_layout)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet("background-color: #f0f0f0; border: none;")
+
+        container = QWidget()
+        self.grid_layout = QGridLayout(container)
+        self.grid_layout.setSpacing(20)
+        self.grid_layout.setContentsMargins(30, 30, 30, 30)
+        self.grid_layout.setAlignment(Qt.AlignTop | Qt.AlignLeft)
+        scroll.setWidget(container)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(top_bar)
+        layout.addWidget(scroll)
+        self.setLayout(layout)
+
+    def _list_shader_files(self):
+        try:
+            files = [f for f in os.listdir(SHADERS_DIR) if f.lower().endswith((".glsl", ".frag"))]
+            # 最新修改时间靠前
+            files.sort(key=lambda n: os.path.getmtime(os.path.join(SHADERS_DIR, n)), reverse=True)
+            return files
+        except Exception as e:
+            print(f"[ShaderPage] 列表读取失败: {e}")
+            return []
+
+    def showEvent(self, event):  # 动态刷新：进入页面/窗口显示时触发
+        for i in reversed(range(self.grid_layout.count())):
+            item = self.grid_layout.itemAt(i).widget()
+            if item:
+                item.deleteLater()
+
+        shader_files = self._list_shader_files()
+        if not shader_files:
+            label = QLabel("目录中暂无 Shader 文件")
+            label.setAlignment(Qt.AlignCenter)
+            label.setFont(QFont("Arial", 12))
+            self.grid_layout.addWidget(label, 0, 0)
+            return
+
+        cols = 4
+        for idx, filename in enumerate(shader_files):
+            row = idx // cols
+            col = idx % cols
+            card = self.create_shader_card(filename)
+            self.grid_layout.addWidget(card, row, col, Qt.AlignTop | Qt.AlignLeft)
+
+    def create_shader_card(self, filename: str):
+        full_path = os.path.join(SHADERS_DIR, filename)
+        mtime = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(os.path.getmtime(full_path))) if os.path.exists(full_path) else "--"
+        card = QFrame()
+        card.setStyleSheet("""
+            QFrame { background-color: #ffffff; border-radius: 8px; border: 2px solid #e0e0e0; }
+            QFrame:hover { border: 2px solid #2b6dad; }
+        """)
+        card.setFixedSize(250, 190)
+
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(6)
+
+        preview = QLabel("🖼️")
+        preview.setAlignment(Qt.AlignCenter)
+        preview.setStyleSheet("QLabel { background-color: #e6e6e6; border-radius: 6px; font-size:28px; }")
+        preview.setFixedHeight(100)
+
+        name_label = QLabel(filename)
+        name_label.setFont(QFont("Arial", 10, QFont.Bold))
+        name_label.setStyleSheet("color: #333333;")
+        name_label.setWordWrap(True)
+
+        date_label = QLabel(mtime)
+        date_label.setFont(QFont("Arial", 9))
+        date_label.setStyleSheet("color: #666666;")
+
+        # 读取前几行作为 tooltip
+        try:
+            with open(full_path, 'r', encoding='utf-8', errors='ignore') as f:
+                head = ''.join([next(f) for _ in range(5)])
+            card.setToolTip(head)
+        except Exception:
+            pass
+
+        layout.addWidget(preview)
+        layout.addWidget(name_label)
+        layout.addWidget(date_label)
+        layout.addStretch()
+        return card
+
 
 class MainWindow(QMainWindow):
-    """
-    The main application window, containing the visualizer and control panel.
-    """
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Real-time Audio Visualizer")
-        self.setGeometry(100, 100, 1280, 720)
-        self.current_shader_path = None # 用于存储当前选择的着色器路径
-        self.shader_viewer_process = None # 用于跟踪独立窗口进程
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Shader 界面演示")
+        self.setGeometry(200, 100, 1280, 720)
+        self.shader_library = []
+        self.stack = QStackedWidget()
+        self.setCentralWidget(self.stack)
+        self.main_page = MainPage(self.show_shader_page, self.shader_library)
+        self.shader_page = ShaderPage(self.show_main_page, self.shader_library)
+        self.stack.addWidget(self.main_page)
+        self.stack.addWidget(self.shader_page)
 
-        # --- Central Widget and Layout ---
-        main_widget = QWidget()
-        self.setCentralWidget(main_widget)
-        layout = QHBoxLayout(main_widget)
+    def show_shader_page(self):
+        self.stack.setCurrentWidget(self.shader_page)
 
-        # --- OpenGL Visualizer Widget ---
-        self.visualizer = VisualizerWidget(self)
-        
-        # --- Control Panel (Web View) ---
-        self.web_view = QWebEngineView()
-        self.web_channel = QWebChannel()
-        self.backend = Backend(self)
-        self.web_channel.registerObject("backend", self.backend)
-        self.web_view.page().setWebChannel(self.web_channel)
-        
-        # Load the HTML file for the control panel
-        control_html_path = os.path.join(CURRENT_DIR, "html", "frontend.html")
-        self.web_view.setUrl(QUrl.fromLocalFile(control_html_path))
+    def show_main_page(self):
+        self.stack.setCurrentWidget(self.main_page)
 
-        # --- Splitter to manage layout ---
-        splitter = QSplitter(Qt.Horizontal)
-        splitter.addWidget(self.visualizer)
-        splitter.addWidget(self.web_view)
-        splitter.setSizes([900, 380]) # Initial size distribution
-        layout.addWidget(splitter)
 
-        # --- Audio Processing Thread ---
-        self.audio_thread = AudioThread(self)
-        self.audio_thread.newData.connect(self.update_audio_texture)
-        
-        # --- Connect signals for safe initialization ---
-        self.backend.shaderChanged.connect(self.on_shader_changed)
-        self.visualizer.initialized.connect(self.on_visualizer_initialized)
-
-    @pyqtSlot(str)
-    def on_shader_changed(self, shader_path: str):
-        """当着色器改变时，加载它并存储路径"""
-        self.current_shader_path = shader_path
-        self.visualizer.load_shader(shader_path)
-
-    @pyqtSlot()
-    def on_visualizer_initialized(self):
-        """
-        Called when the VisualizerWidget's OpenGL context is ready.
-        """
-        print("[MainWindow] Visualizer initialized. Setting up audio texture and loading shader.")
-        # Use a dummy size for now, AudioSource will provide the real size
-        fft_size = self.audio_thread.audio.fft_size if self.audio_thread.audio else 512
-        self.visualizer.setup_audio_texture(fft_size)
-        
-        # Load initial shader
-        initial_shader = os.path.join(SHADER_DIR, "test.glsl")
-        if os.path.exists(initial_shader):
-            self.on_shader_changed(initial_shader) # 使用新的槽来加载
-        else:
-            print(f"Warning: Initial shader '{initial_shader}' not found.")
-
-        # Now it's safe to start the audio thread
-        self.audio_thread.start()
-
-    @pyqtSlot(object)
-    def update_audio_texture(self, texture_data):
-        """Updates the iChannel0 texture with new data from the audio thread."""
-        self.visualizer.update_channel_texture_data(0, texture_data)
-
-    def closeEvent(self, event):
-        """Ensures threads and processes are stopped cleanly on exit."""
-        print("[MainWindow] Closing application...")
-        self.audio_thread.stop()
-        # 如果需要，可以在这里终止独立窗口进程
-        if self.shader_viewer_process and self.shader_viewer_process.is_alive():
-            self.shader_viewer_process.terminate()
-        event.accept()
-
-def main():
-    """Application entry point."""
+if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = MainWindow()
     window.show()
     sys.exit(app.exec_())
-
-if __name__ == "__main__":
-    main()
