@@ -179,7 +179,11 @@ class ShaderViewer:
 
     def render(self, uniforms: ShaderToyUniforms) -> None:
         """Render one frame with given uniforms"""
-        GL.glClearColor(0.0, 0.0, 0.0, 1.0)
+        # Enable alpha blending so shaders can output transparent pixels
+        GL.glEnable(GL.GL_BLEND)
+        GL.glBlendFunc(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA)
+        # Use transparent clear color so alpha=0 pixels become holes
+        GL.glClearColor(0.0, 0.0, 0.0, 0.0)
         GL.glClear(GL.GL_COLOR_BUFFER_BIT)
 
         self.update_uniforms(uniforms)
