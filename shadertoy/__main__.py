@@ -2,6 +2,7 @@
 Main application entry point for ShaderToy-like application.
 """
 import sys
+import os
 from pathlib import Path
 import time
 import datetime
@@ -15,8 +16,12 @@ from shadertoy.uniforms import ShaderToyUniforms, TextureChannel
 
 class ShaderToyApp:
     """Main application class managing uniforms and rendering"""
-    def __init__(self, shader_path: str, width: int = 1920, height: int = 480, borderless: bool = False):
+    def __init__(self, shader_path: str, width: int = 1920, height: int = 480, borderless: bool = False,
+                 monitor_index: int | None = None, center: bool = False, offset: tuple[int, int] | None = None):
         self.viewer = ShaderViewer(width, height, borderless=borderless)
+        if monitor_index is not None:
+            # place window on monitor before loading heavy resources
+            self.viewer.place_on_monitor(monitor_index, center=center, offset=offset)
         self.viewer.load_shader(shader_path)
         
         # Setup audio
@@ -144,7 +149,15 @@ def main():
             sys.exit(1)
         shader_path = default_shader
     
-    app = ShaderToyApp(str(shader_path))
+    # Allow optional monitor selection via env: SHADER_MONITOR_INDEX
+    mon_env = os.environ.get("SHADER_MONITOR_INDEX")
+    mon_index = None
+    try:
+        if mon_env is not None:
+            mon_index = int(mon_env)
+    except Exception:
+        mon_index = None
+    app = ShaderToyApp(str(shader_path), monitor_index=mon_index, borderless=False)
     app.run()
 
 
