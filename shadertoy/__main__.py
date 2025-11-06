@@ -42,15 +42,29 @@ class ShaderToyApp:
     def setup_audio_channel(self):
         """Setup audio as iChannel0"""
         import OpenGL.GL as GL
-        tex = GL.glGenTextures(1)
-        GL.glBindTexture(GL.GL_TEXTURE_2D, tex)
+        # Create two textures: iChannel0 for time-domain waveform, iChannel1 for FFT spectrum
+        tex_time = GL.glGenTextures(1)
+        GL.glBindTexture(GL.GL_TEXTURE_2D, tex_time)
         GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MIN_FILTER, GL.GL_LINEAR)
         GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MAG_FILTER, GL.GL_LINEAR)
         GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_WRAP_S, GL.GL_CLAMP_TO_EDGE)
         GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_WRAP_T, GL.GL_CLAMP_TO_EDGE)
-        
+
+        tex_fft = GL.glGenTextures(1)
+        GL.glBindTexture(GL.GL_TEXTURE_2D, tex_fft)
+        GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MIN_FILTER, GL.GL_LINEAR)
+        GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MAG_FILTER, GL.GL_LINEAR)
+        GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_WRAP_S, GL.GL_CLAMP_TO_EDGE)
+        GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_WRAP_T, GL.GL_CLAMP_TO_EDGE)
+
+        # iChannel0: time-domain buffer (width = chunk_size, height = 1)
         self.uniforms.iChannels[0] = TextureChannel(
-            texture_id=tex,
+            texture_id=tex_time,
+            resolution=(self.audio.chunk_size, 1, 0)
+        )
+        # iChannel1: FFT spectrum (width = fft_size, height = 1)
+        self.uniforms.iChannels[1] = TextureChannel(
+            texture_id=tex_fft,
             resolution=(self.audio.fft_size, 1, 0)
         )
 
@@ -80,11 +94,30 @@ class ShaderToyApp:
             float(now.hour*3600 + now.minute*60 + now.second)
         )
         
-        # Update audio channel
+        # Update audio channel(s)
         self.audio.update()
-        texdata = self.audio.get_texture_data()
-        self.uniforms.iChannels[0].data = texdata
+        # FFT texture data (shape: 1 x fft_size x 4)
+        texdata_fft = self.audio.get_texture_data()
+
+        # Time-domain buffer: copy current audio buffer into a 1xchunk_size RGBA texture
+        import numpy as _np
+        with self.audio._lock:
+            td = self.audio._audio_buffer.copy()
+        # Ensure correct length
+        if td.size != self.audio.chunk_size:
+            a = _np.zeros(self.audio.chunk_size, dtype=_np.float32)
+            a[:td.size] = td
+            td = a
+        texdata_time = _np.zeros((1, td.size, 4), dtype=_np.float32)
+        texdata_time[0, :, 0] = td  # R channel holds time-domain samples
+
+        # Assign into uniform channels
+        # iChannel0 -> time-domain
+        self.uniforms.iChannels[0].data = texdata_time
         self.uniforms.iChannels[0].time = self.uniforms.iTime
+        # iChannel1 -> FFT
+        self.uniforms.iChannels[1].data = texdata_fft
+        self.uniforms.iChannels[1].time = self.uniforms.iTime
         # fill audio-related uniforms - only sample rate
         try:
             self.uniforms.iSampleRate = float(self.audio.sample_rate)
@@ -95,7 +128,7 @@ class ShaderToyApp:
         if self.frame_count % 60 == 0:
             try:
                 import numpy as _np
-                peak = float(_np.max(texdata)) if texdata is not None else 0.0
+                peak = float(_np.max(texdata_fft)) if texdata_fft is not None else 0.0
                 # Also report raw audio buffer amplitude (before FFT/normalization)
                 try:
                     with self.audio._lock:

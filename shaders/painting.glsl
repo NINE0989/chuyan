@@ -150,13 +150,11 @@ void mainImage( out vec4 fragColor_out, in vec2 fragCoord )
     float sunThreshold = 0.15;
     bool redColor = (col.r > 0.45) && (col.r > 1.2 * max(col.g, col.b));
     bool sunMask = (Sun > sunThreshold) || redColor;
-    if (sunMask) {
-        fragColor_out = vec4(col, 1.0);
-    } else {
-        float lum = dot(col, vec3(0.299, 0.587, 0.114));
-        float inv = 1.0 - lum;
-        fragColor_out = vec4(vec3(inv), 1.0);
-    }
+    // 全画面二值阈值反转：高于阈值的像素变黑，低于阈值的像素变白（包括太阳）
+    float lum = dot(col, vec3(0.299, 0.587, 0.114));
+    float t = 0.5; // 阈值，可调整为 0.4/0.6 等
+    float outv = (lum > t) ? 0.0 : 1.0; // 亮的变黑(0)，暗的变白(1)
+    fragColor_out = vec4(vec3(outv), 1.0);
 }
 
 void main() {
