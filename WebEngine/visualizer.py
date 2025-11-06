@@ -3,18 +3,32 @@ OpenGL widget for rendering shaders using PyQt5.
 """
 import time
 import traceback
+import sys
+from pathlib import Path
 from PyQt5.QtWidgets import QOpenGLWidget
 from PyQt5.QtCore import QTimer, pyqtSignal
 import OpenGL.GL as GL
 
-from shadertoy.shader import Shader
-from shadertoy.uniforms import ShaderToyUniforms, TextureChannel
+# --- Robust import of project-local shadertoy package ---
+try:
+    from shadertoy.shader import Shader  # type: ignore
+    from shadertoy.uniforms import ShaderToyUniforms, TextureChannel  # type: ignore
+except ModuleNotFoundError:
+    # Add project root (parent of WebEngine) to sys.path then retry
+    project_root = Path(__file__).resolve().parent.parent
+    if str(project_root) not in sys.path:
+        sys.path.insert(0, str(project_root))
+    try:
+        from shadertoy.shader import Shader  # type: ignore
+        from shadertoy.uniforms import ShaderToyUniforms, TextureChannel  # type: ignore
+    except ModuleNotFoundError as e:
+        raise ModuleNotFoundError(
+            f"无法导入 shadertoy 包：{e}. 请确认项目根目录在 PYTHONPATH 且包含 shadertoy/__init__.py")
 
 class VisualizerWidget(QOpenGLWidget):
-    """
-    A QOpenGLWidget that renders a GLSL shader, similar to ShaderToy.
-    """
+    """A QOpenGLWidget that renders a GLSL shader, similar to ShaderToy."""
     initialized = pyqtSignal()
+    compileError = pyqtSignal(str)  # Emits error log when shader compile fails
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -45,9 +59,12 @@ class VisualizerWidget(QOpenGLWidget):
             self.doneCurrent()
             print(f"[Visualizer] Shader '{shader_path}' loaded successfully.")
         except Exception as e:
-            print(f"Error loading shader: {e}")
-            traceback.print_exc()
+            # Capture traceback text
+            err_lines = traceback.format_exc().splitlines()
+            short_log = '\n'.join(err_lines[-10:])  # limit size
+            print(f"[Visualizer] Error loading shader: {e}\n{short_log}")
             self.shader = None
+            self.compileError.emit(short_log)
 
     def setup_audio_texture(self, fft_size: int):
         """

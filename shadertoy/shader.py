@@ -45,8 +45,48 @@ class ShaderViewer:
             raise RuntimeError('Failed to create window')
 
         glfw.make_context_current(self.window)
+        self.width = width
+        self.height = height
+        # install key callback for ESC to close
+        glfw.set_key_callback(self.window, self._on_key)
         self.setup_quad()
         self.uniforms: Dict[str, int] = {}
+
+    # ---------------- input & window placement helpers -----------------
+    def _on_key(self, window, key, scancode, action, mods):  # pragma: no cover - GLFW callback
+        try:
+            if key == glfw.KEY_ESCAPE and action == glfw.PRESS:
+                glfw.set_window_should_close(self.window, True)
+        except Exception:
+            pass
+
+    def place_on_monitor(self, monitor_index: int = 0, center: bool = False, offset: tuple[int, int] | None = None):
+        """Place window on the given monitor (multi-monitor setups). Fallback to primary.
+        monitor_index: index into glfw.get_monitors()
+        center: if True, center window on target monitor else top-left
+        offset: optional (dx, dy) applied after chosen anchor
+        """
+        try:
+            monitors = glfw.get_monitors() or []
+            if not monitors:
+                return
+            if monitor_index < 0 or monitor_index >= len(monitors):
+                monitor_index = 0
+            mon = monitors[monitor_index]
+            mx, my = glfw.get_monitor_pos(mon)
+            mode = glfw.get_video_mode(mon)
+            mw, mh = mode.size.width, mode.size.height if hasattr(mode, 'size') else (mode.width, mode.height)  # type: ignore
+            if center:
+                x = mx + max(0, (mw - self.width) // 2)
+                y = my + max(0, (mh - self.height) // 2)
+            else:
+                x, y = mx, my
+            if offset:
+                x += offset[0]
+                y += offset[1]
+            glfw.set_window_pos(self.window, int(x), int(y))
+        except Exception:
+            pass
 
     def setup_quad(self) -> None:
         """Setup fullscreen quad for rendering"""
