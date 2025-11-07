@@ -58,7 +58,7 @@ def launch_borderless_process(shader_code: str, source_path: Optional[str]) -> m
     except Exception:
         monitor_index = None
 
-    p = multiprocessing.Process(target=run_shader_viewer, args=(shader_path, 1280, 360, monitor_index))
+    p = multiprocessing.Process(target=run_shader_viewer, args=(shader_path, 1920, 480, monitor_index))
     p.daemon = False
     p.start()
     return p

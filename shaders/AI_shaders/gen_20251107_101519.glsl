@@ -1,5 +1,5 @@
-#version 330 core
 // Simple Audio-Reactive Particle & Wave Shader
+#version 330 core
 // Compatibility boilerplate
 #ifdef GL_ES
 precision mediump float;

@@ -72,6 +72,8 @@ class ShaderViewer:
                 return
             if monitor_index < 0 or monitor_index >= len(monitors):
                 monitor_index = 0
+            else:
+                monitor_index = 1
             mon = monitors[monitor_index]
             mx, my = glfw.get_monitor_pos(mon)
             mode = glfw.get_video_mode(mon)

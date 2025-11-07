@@ -20,7 +20,7 @@ if not logger.handlers:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 DEFAULT_BASE_URL = "https://ark.cn-beijing.volces.com/api/v3"
-DEFAULT_MODEL = "doubao-seed-1-6-vision-250815"
+DEFAULT_MODEL = "doubao-seed-1-6-lite-251015"
 
 class AIService:
     def __init__(self, model: str = DEFAULT_MODEL, timeout: int = 120):
@@ -64,8 +64,7 @@ class AIService:
             "\n    vec4 fragColor;"  
             "\n    mainImage(fragColor, gl_FragCoord.xy);"  
             "\n    gl_FragColor = fragColor;"  
-            "\n    #else"  
-            "\n    out vec4 fragColor;"  
+            "\n    #else"    
             "\n    mainImage(fragColor, gl_FragCoord.xy);"  
             "\n    #endif"  
             "\n}"
