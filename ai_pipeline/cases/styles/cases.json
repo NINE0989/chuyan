@@ -1,0 +1,29 @@
+﻿[
+  {
+    "id": "style_ink",
+    "type": "style",
+    "intent": "水墨风格特化",
+    "input": {
+      "style_profile": "ink"
+    },
+    "expected_signals": ["低饱和配色", "边缘扩散", "节奏偏缓"]
+  },
+  {
+    "id": "style_neon",
+    "type": "style",
+    "intent": "霓虹风格特化",
+    "input": {
+      "style_profile": "neon"
+    },
+    "expected_signals": ["高对比高光", "辉光叠加", "节奏偏强"]
+  },
+  {
+    "id": "style_glitch",
+    "type": "style",
+    "intent": "故障风格特化",
+    "input": {
+      "style_profile": "glitch"
+    },
+    "expected_signals": ["时序扰动", "色道偏移", "断续条纹"]
+  }
+]

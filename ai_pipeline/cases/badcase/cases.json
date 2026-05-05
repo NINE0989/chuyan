@@ -1,0 +1,26 @@
+﻿[
+  {
+    "id": "bad_missing_uniform",
+    "type": "bad",
+    "intent": "引用未声明 uniform 的失败场景",
+    "input": {
+      "audio_profile": "balanced",
+      "geometry_targets": ["circle"],
+      "style_profile": "minimal"
+    },
+    "expected_signals": ["hook:glsl_quality:ok", "生成文件:"],
+    "known_risks": ["编译失败"]
+  },
+  {
+    "id": "bad_oob_sampling",
+    "type": "bad",
+    "intent": "纹理采样越界的失败场景",
+    "input": {
+      "audio_profile": "aggressive",
+      "geometry_targets": ["line", "box"],
+      "style_profile": "glitch"
+    },
+    "expected_signals": ["hook:glsl_quality:ok", "生成文件:"],
+    "known_risks": ["画面闪烁", "NaN 扩散"]
+  }
+]

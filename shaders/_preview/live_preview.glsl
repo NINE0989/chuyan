@@ -1,5 +1,7 @@
 #version 330 core
-// Desktop-compatible fragment shader wrapper
+// White-on-black variant of empty_try.glsl
+// Background is black; subject (flame/visual) is rendered in white (intensity only).
+
 
 #ifdef GL_ES
 precision mediump float;
@@ -28,20 +30,17 @@ vec3 B2_spline(vec3 x) { // returns 3 B-spline functions of degree 2
 
 void mainImage( out vec4 outColor, in vec2 fragCoord )
 {
-    // create pixel coordinates
     vec2 uv = fragCoord.xy / iResolution.xy;
 
     float fVBars = 100.0;
     float fHSpacing = 1.00;
-    
     float fHFreq = (uv.x * 3.14159265);
     float squarewave = sign(sin(fHFreq * fVBars) + 1.0 - fHSpacing);
-    
+
     float x = floor(uv.x * fVBars) / fVBars;
     float fSample = TEX(iChannel0, vec2(abs(2.0 * x - 1.0), 0.25)).x;
-  
     float fft = squarewave * fSample * 0.5;
-    
+
     float fHBars = 100.0;
     float fVSpacing = 0.180;
     float fVFreq = (uv.y * 3.14159265);
@@ -52,19 +51,24 @@ void mainImage( out vec4 outColor, in vec2 fragCoord )
     float polychrome = 1.0;
     vec3 spline_args = fract(vec3(polychrome * uv.x - t) + vec3(0.0, -1.0/3.0, -2.0/3.0));
     vec3 spline = B2_spline(spline_args);
-    
+
     float f = abs(centered.y);
     vec3 base_color  = vec3(1.0, 1.0, 1.0) - f * spline;
     vec3 flame_color = pow(base_color, vec3(3.0));
-    
+
     float tt = 0.3 - uv.y;
     float df = sign(tt);
     df = (df + 1.0) / 0.5;
     vec3 col = flame_color * vec3(1.0 - step(fft, abs(0.3 - uv.y))) * vec3(fVFreq);
     col -= col * df * 0.180;
-    
-    // output final color
-    outColor = vec4(col, 1.0);
+
+    // Convert color visualization to white intensity on black
+    // Use luminance-like measure and amplify slightly for visibility
+    float intensity = length(col); // sum of components -> energy
+    intensity = pow(intensity, 0.9) * 1.8; // gentle gamma and boost
+    intensity = clamp(intensity, 0.0, 1.0);
+
+    outColor = vec4(vec3(intensity), 1.0);
 }
 
 void main() {
