@@ -1,5 +1,5 @@
 // AI_PIPELINE_HOOK
-// style_profile: glitch
+// style_profile: minimal
 // generated_with: mock_mcp_adapter
 #version 330 core
 uniform vec3 iResolution;

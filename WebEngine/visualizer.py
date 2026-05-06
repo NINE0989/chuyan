@@ -13,6 +13,7 @@ import OpenGL.GL as GL
 try:
     from shadertoy.shader import Shader  # type: ignore
     from shadertoy.uniforms import ShaderToyUniforms, TextureChannel  # type: ignore
+    from shadertoy.gesture import GestureTracker  # type: ignore
 except ModuleNotFoundError:
     # Add project root (parent of WebEngine) to sys.path then retry
     project_root = Path(__file__).resolve().parent.parent
@@ -21,6 +22,7 @@ except ModuleNotFoundError:
     try:
         from shadertoy.shader import Shader  # type: ignore
         from shadertoy.uniforms import ShaderToyUniforms, TextureChannel  # type: ignore
+        from shadertoy.gesture import GestureTracker  # type: ignore
     except ModuleNotFoundError as e:
         raise ModuleNotFoundError(
             f"无法导入 shadertoy 包：{e}. 请确认项目根目录在 PYTHONPATH 且包含 shadertoy/__init__.py")
@@ -34,10 +36,13 @@ class VisualizerWidget(QOpenGLWidget):
         super().__init__(parent)
         self.shader = None
         self.uniforms = ShaderToyUniforms()
+        # run native tracker; it publishes to the local named pipe for other processes
+        self.gesture = GestureTracker()
         self.start_time = time.time()
         self.last_time = self.start_time
         self.frame_count = 0
         self._is_initialized = False
+        self._gesture_started = False
         
         # Timer to trigger updates
         self.timer = QTimer(self)
@@ -112,6 +117,13 @@ class VisualizerWidget(QOpenGLWidget):
         print(f"  OpenGL Version: {GL.glGetString(GL.GL_VERSION).decode()}")
         print(f"  GLSL Version: {GL.glGetString(GL.GL_SHADING_LANGUAGE_VERSION).decode()}")
         self._is_initialized = True
+        try:
+            self.gesture.start_capture()
+            self._gesture_started = True
+            print("[Visualizer] gesture tracking started")
+        except Exception as e:  # noqa: BLE001
+            self._gesture_started = False
+            print(f"[Visualizer] gesture tracking not started: {e}")
         self.initialized.emit()
 
     def paintGL(self):
@@ -132,6 +144,19 @@ class VisualizerWidget(QOpenGLWidget):
         
         # Update resolution
         self.uniforms.iResolution = (self.width(), self.height(), 0.0)
+
+        # Update gesture uniforms from the embedded tracker if available
+        if self._gesture_started:
+            hand_pos, hand_action = self.gesture.get_gesture_data()
+            self.uniforms.iHandPos = (
+                float(hand_pos[0]),
+                float(hand_pos[1]),
+                float(hand_pos[2]),
+            )
+            self.uniforms.iHandAction = float(hand_action)
+        else:
+            self.uniforms.iHandPos = (0.0, 0.0, 0.0)
+            self.uniforms.iHandAction = 0.0
 
         # Use the shader program
         GL.glUseProgram(self.shader.program)
@@ -155,3 +180,10 @@ class VisualizerWidget(QOpenGLWidget):
         """
         GL.glViewport(0, 0, w, h)
         self.uniforms.iResolution = (w, h, 1.0)
+
+    def closeEvent(self, event):
+        try:
+            if self._gesture_started:
+                self.gesture.stop_capture()
+        finally:
+            super().closeEvent(event)

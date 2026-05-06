@@ -49,8 +49,10 @@ class GenerationWorker(QThread):
             else:
                 self.finished.emit(GenerationResult(True, code=code))
         except Exception as e:  # noqa: BLE001
-            self.finished.emit(GenerationResult(False, error=str(e)))
-
+            # self.finished.emit(GenerationResult(False, error=str(e)))
+            import traceback
+            err_msg = str(e) + "\n" + traceback.format_exc()
+            self.finished.emit(GenerationResult(False, error=err_msg))
 # ---------------- UI Elements -----------------
 class ChatBubble(QFrame):
     def __init__(self, text: str, is_user: bool = False):

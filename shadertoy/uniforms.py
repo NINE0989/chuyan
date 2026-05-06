@@ -24,6 +24,8 @@ class ShaderToyUniforms:
     iMouse: Tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0)
     iDate: Tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0)
     iSampleRate: float = 44100.0
+    iHandPos: Tuple[float, float, float] = (0.0, 0.0, 0.0)
+    iHandAction: float = 0.0
 
     iChannels: List[TextureChannel] = field(default_factory=lambda: [
         TextureChannel() for _ in range(4)

@@ -5,3 +5,5 @@ pyQt5
 pyqtgraph
 pyaudiowpatch
 PyQtWebEngine
+opencv-python
+mediapipe

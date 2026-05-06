@@ -29,6 +29,24 @@ python -m shadertoy shaders/audio_viz.glsl
 python WebEngine/app.py
 ```
 
+## 手势交互
+
+当前已接入 MediaPipe 手势识别，并支持主窗口与 borderless 窗口共享同一份手势结果。
+
+- 手势数据由主进程侧的摄像头采集并统一发布，外部窗口通过本地命名管道订阅，不再重复占用摄像头。
+- 运行时会优先使用仓库内固定路径的本地模型文件 `shadertoy/assets/hand_landmarker.task`，避免自动联网下载。
+- Shader 可读取新增 uniform：`iHandPos` 和 `iHandAction`，用于实现手势焦点与捏合强度联动。
+- 如需覆盖模型路径，可设置环境变量 `SHADERTOY_HAND_LANDMARKER_MODEL` 指向本地 `.task` 文件。
+- 如需覆盖命名管道名称，可设置环境变量 `SHADERTOY_GESTURE_PIPE`。
+
+推荐的验证方式：
+
+```powershell
+python WebEngine/app.py
+```
+
+随后从主界面启动 borderless 预览，确认两个窗口都能随同一份手势输入变化。
+
 ## 关键决策（音频输入到 AI）
 
 经评估，`实时音频 -> AI 实时生成` 当前不采用，原因如下：

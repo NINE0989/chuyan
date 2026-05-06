@@ -78,5 +78,47 @@
       "role": "assistant",
       "content": "```glsl\n#version 330 core\nuniform vec3 iResolution;\nuniform float iTime;\nuniform sampler2D iChannel0;\nout vec4 FragColor;\nvoid mainImage(out vec4 fragColor, in vec2 fragCoord){\nvec2 uv = fragCoord.xy / iResolution.xy;\nvec2 p = (uv - 0.5) * vec2(iResolution.x / iResolution.y, 1.0);\nfloat bass = texture(iChannel0, vec2(0.05, 0.25)).r;\nfloat mid = texture(iChannel0, vec2(0.25, 0.25)).r;\nfloat tre = texture(iChannel0, vec2(0.75, 0.25)).r;\nfloat r = length(p);\nfloat ring = smoothstep(0.03, 0.0, abs(r - (0.25 + bass * 0.2 + 0.03*sin(iTime))));\nvec3 col = vec3(0.02, 0.02, 0.03);\ncol += ring * vec3(0.2 + bass, 0.5 + mid, 0.8 + tre);\nfragColor = vec4(col, 1.0);\n}\nvoid main(){ mainImage(FragColor, gl_FragCoord.xy); }\n```"
     }
+  ],
+  "web_6cdba4184f": [
+    {
+      "role": "user",
+      "content": "宇宙\n[geometry_sdf] 几何构建建议：使用 SDF 基元（circle/box/segment/polygon）、smooth min 布尔融合、极坐标重复与旋转变换。\n[audio_visualization] 音频可视化建议：分带采样低中高频，叠加频谱柱状、径向脉冲、波形描边，加入峰值保持与时间衰减。\n[style_specialization] 风格特化建议：依据 style_profile 调整配色、噪声纹理、光晕与运动节奏。\n[badcase_guard] 坏例规避建议：避免未声明 uniform、避免数组越界、避免 NaN 传播，保证纹理采样坐标在[0,1]范围。"
+    },
+    {
+      "role": "assistant",
+      "content": "{\"music_style\": \"电子/节奏驱动\", \"energy_curve\": \"中高能量，间歇性峰值\", \"band_mapping\": {\"low\": \"低频控制主形体\", \"mid\": \"中频控制纹理\", \"high\": \"高频控制高光\"}, \"visual_directions\": [\"径向脉冲环\", \"频带驱动粒子\", \"高频闪烁边缘\"], \"shader_plan\": [\"低频控制尺度\", \"中频控制纹理扰动\", \"高频控制辉光与闪烁\"], \"goodcase_checks\": [\"包含 mainImage\", \"包含 iChannel0 采样\"], \"badcase_risks\": [\"uniform 缺失\", \"采样越界\"], \"hook_hints\": [\"避免 gl_FragColor\", \"保证 iTime/iResolution 存在\"], \"confidence\": 0.5}"
+    },
+    {
+      "role": "assistant",
+      "content": "```glsl\n#version 330 core\nuniform vec3 iResolution;\nuniform float iTime;\nuniform sampler2D iChannel0;\nout vec4 FragColor;\nvoid mainImage(out vec4 fragColor, in vec2 fragCoord){\nvec2 uv = fragCoord.xy / iResolution.xy;\nvec2 p = (uv - 0.5) * vec2(iResolution.x / iResolution.y, 1.0);\nfloat bass = texture(iChannel0, vec2(0.05, 0.25)).r;\nfloat mid = texture(iChannel0, vec2(0.25, 0.25)).r;\nfloat tre = texture(iChannel0, vec2(0.75, 0.25)).r;\nfloat r = length(p);\nfloat ring = smoothstep(0.03, 0.0, abs(r - (0.25 + bass * 0.2 + 0.03*sin(iTime))));\nvec3 col = vec3(0.02, 0.02, 0.03);\ncol += ring * vec3(0.2 + bass, 0.5 + mid, 0.8 + tre);\nfragColor = vec4(col, 1.0);\n}\nvoid main(){ mainImage(FragColor, gl_FragCoord.xy); }\n```"
+    }
+  ],
+  "web_90f1ab490e": [
+    {
+      "role": "user",
+      "content": "宇宙\n[geometry_sdf] 几何构建建议：使用 SDF 基元（circle/box/segment/polygon）、smooth min 布尔融合、极坐标重复与旋转变换。\n[audio_visualization] 音频可视化建议：分带采样低中高频，叠加频谱柱状、径向脉冲、波形描边，加入峰值保持与时间衰减。\n[style_specialization] 风格特化建议：依据 style_profile 调整配色、噪声纹理、光晕与运动节奏。\n[badcase_guard] 坏例规避建议：避免未声明 uniform、避免数组越界、避免 NaN 传播，保证纹理采样坐标在[0,1]范围。"
+    },
+    {
+      "role": "assistant",
+      "content": "{\"music_style\": \"电子/节奏驱动\", \"energy_curve\": \"中高能量，间歇性峰值\", \"band_mapping\": {\"low\": \"低频控制主形体\", \"mid\": \"中频控制纹理\", \"high\": \"高频控制高光\"}, \"visual_directions\": [\"径向脉冲环\", \"频带驱动粒子\", \"高频闪烁边缘\"], \"shader_plan\": [\"低频控制尺度\", \"中频控制纹理扰动\", \"高频控制辉光与闪烁\"], \"goodcase_checks\": [\"包含 mainImage\", \"包含 iChannel0 采样\"], \"badcase_risks\": [\"uniform 缺失\", \"采样越界\"], \"hook_hints\": [\"避免 gl_FragColor\", \"保证 iTime/iResolution 存在\"], \"confidence\": 0.5}"
+    },
+    {
+      "role": "assistant",
+      "content": "```glsl\n#version 330 core\nuniform vec3 iResolution;\nuniform float iTime;\nuniform sampler2D iChannel0;\nout vec4 FragColor;\nvoid mainImage(out vec4 fragColor, in vec2 fragCoord){\nvec2 uv = fragCoord.xy / iResolution.xy;\nvec2 p = (uv - 0.5) * vec2(iResolution.x / iResolution.y, 1.0);\nfloat bass = texture(iChannel0, vec2(0.05, 0.25)).r;\nfloat mid = texture(iChannel0, vec2(0.25, 0.25)).r;\nfloat tre = texture(iChannel0, vec2(0.75, 0.25)).r;\nfloat r = length(p);\nfloat ring = smoothstep(0.03, 0.0, abs(r - (0.25 + bass * 0.2 + 0.03*sin(iTime))));\nvec3 col = vec3(0.02, 0.02, 0.03);\ncol += ring * vec3(0.2 + bass, 0.5 + mid, 0.8 + tre);\nfragColor = vec4(col, 1.0);\n}\nvoid main(){ mainImage(FragColor, gl_FragCoord.xy); }\n```"
+    }
+  ],
+  "web_24d984f2ec": [
+    {
+      "role": "user",
+      "content": "宇宙\n[geometry_sdf] 几何构建建议：使用 SDF 基元（circle/box/segment/polygon）、smooth min 布尔融合、极坐标重复与旋转变换。\n[audio_visualization] 音频可视化建议：分带采样低中高频，叠加频谱柱状、径向脉冲、波形描边，加入峰值保持与时间衰减。\n[style_specialization] 风格特化建议：依据 style_profile 调整配色、噪声纹理、光晕与运动节奏。\n[badcase_guard] 坏例规避建议：避免未声明 uniform、避免数组越界、避免 NaN 传播，保证纹理采样坐标在[0,1]范围。"
+    },
+    {
+      "role": "assistant",
+      "content": "{\"music_style\": \"电子/节奏驱动\", \"energy_curve\": \"中高能量，间歇性峰值\", \"band_mapping\": {\"low\": \"低频控制主形体\", \"mid\": \"中频控制纹理\", \"high\": \"高频控制高光\"}, \"visual_directions\": [\"径向脉冲环\", \"频带驱动粒子\", \"高频闪烁边缘\"], \"shader_plan\": [\"低频控制尺度\", \"中频控制纹理扰动\", \"高频控制辉光与闪烁\"], \"goodcase_checks\": [\"包含 mainImage\", \"包含 iChannel0 采样\"], \"badcase_risks\": [\"uniform 缺失\", \"采样越界\"], \"hook_hints\": [\"避免 gl_FragColor\", \"保证 iTime/iResolution 存在\"], \"confidence\": 0.5}"
+    },
+    {
+      "role": "assistant",
+      "content": "```glsl\n#version 330 core\nuniform vec3 iResolution;\nuniform float iTime;\nuniform sampler2D iChannel0;\nout vec4 FragColor;\nvoid mainImage(out vec4 fragColor, in vec2 fragCoord){\nvec2 uv = fragCoord.xy / iResolution.xy;\nvec2 p = (uv - 0.5) * vec2(iResolution.x / iResolution.y, 1.0);\nfloat bass = texture(iChannel0, vec2(0.05, 0.25)).r;\nfloat mid = texture(iChannel0, vec2(0.25, 0.25)).r;\nfloat tre = texture(iChannel0, vec2(0.75, 0.25)).r;\nfloat r = length(p);\nfloat ring = smoothstep(0.03, 0.0, abs(r - (0.25 + bass * 0.2 + 0.03*sin(iTime))));\nvec3 col = vec3(0.02, 0.02, 0.03);\ncol += ring * vec3(0.2 + bass, 0.5 + mid, 0.8 + tre);\nfragColor = vec4(col, 1.0);\n}\nvoid main(){ mainImage(FragColor, gl_FragCoord.xy); }\n```"
+    }
   ]
 }

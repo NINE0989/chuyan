@@ -12,12 +12,14 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from shadertoy.shader import ShaderViewer
 from shadertoy.audio import AudioSource
+from shadertoy.gesture import GestureTracker
 from shadertoy.uniforms import ShaderToyUniforms, TextureChannel
 
 class ShaderToyApp:
     """Main application class managing uniforms and rendering"""
     def __init__(self, shader_path: str, width: int = 1920, height: int = 480, borderless: bool = False,
-                 monitor_index: int | None = None, center: bool = False, offset: tuple[int, int] | None = None):
+                 monitor_index: int | None = None, center: bool = False, offset: tuple[int, int] | None = None,
+                 gesture_mode: str = "native"):
         self.viewer = ShaderViewer(width, height, borderless=borderless)
         if monitor_index is not None:
             # place window on monitor before loading heavy resources
@@ -26,6 +28,13 @@ class ShaderToyApp:
         
         # Setup audio
         self.audio = AudioSource()
+        # GestureTracker will handle modes: 'native' or 'remote'
+        try:
+            self.gesture = GestureTracker(mode=gesture_mode)
+            self._gesture_enabled = True
+        except Exception:
+            self.gesture = None
+            self._gesture_enabled = False
         # Try to start audio capture; if it fails we continue but note the state
         try:
             self.audio.start_capture()
@@ -34,6 +43,19 @@ class ShaderToyApp:
         except Exception as e:
             self._audio_started = False
             print(f"[audio] capture not started: {e}")
+
+        # Try to start gesture tracking; if it fails we continue with audio-only mode
+        if self._gesture_enabled and self.gesture is not None:
+            try:
+                self.gesture.start_capture()
+                self._gesture_started = True
+                print("[gesture] tracking started (mode=%s)" % getattr(self.gesture, 'mode', 'unknown'))
+            except Exception as e:
+                self._gesture_started = False
+                print(f"[gesture] tracking not started: {e}")
+        else:
+            self._gesture_started = False
+            print("[gesture] tracking disabled for this process")
         
         # Initialize uniforms
         self.uniforms = ShaderToyUniforms()
@@ -89,6 +111,19 @@ class ShaderToyApp:
         # Update frame counter
         self.uniforms.iFrame = self.frame_count
         self.frame_count += 1
+
+        # Update hand tracking uniforms
+        if getattr(self, '_gesture_started', False) and self.gesture is not None:
+            hand_pos, hand_action = self.gesture.get_gesture_data()
+            self.uniforms.iHandPos = (
+                float(hand_pos[0]),
+                float(hand_pos[1]),
+                float(hand_pos[2]),
+            )
+            self.uniforms.iHandAction = float(hand_action)
+        else:
+            self.uniforms.iHandPos = (0.0, 0.0, 0.0)
+            self.uniforms.iHandAction = 0.0
         
         # Update date
         now = datetime.datetime.now()
@@ -160,6 +195,11 @@ class ShaderToyApp:
             try:
                 if getattr(self, '_audio_started', False):
                     self.audio.stop_capture()
+            except Exception:
+                pass
+            try:
+                if getattr(self, '_gesture_started', False) and self.gesture is not None:
+                    self.gesture.stop_capture()
             except Exception:
                 pass
             self.viewer.cleanup()

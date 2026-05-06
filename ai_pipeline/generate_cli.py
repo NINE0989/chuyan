@@ -34,8 +34,8 @@ def run_quality(root: Path, target_glsl: Path) -> dict[str, str | int]:
     result = subprocess.run(cmd, capture_output=True, text=True, check=False)
     return {
         "returncode": result.returncode,
-        "stdout": result.stdout.strip(),
-        "stderr": result.stderr.strip(),
+        "stdout": result.stdout.strip() if result.stdout else "",
+        "stderr": result.stderr.strip() if result.stderr else "",
     }
 
 

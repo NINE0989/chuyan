@@ -154,7 +154,7 @@ class ShaderViewer:
         # Get uniform locations
         uniform_names = [
             'iResolution', 'iTime', 'iTimeDelta', 'iFrameRate', 'iFrame',
-            'iMouse', 'iDate', 'iSampleRate'
+            'iMouse', 'iDate', 'iSampleRate', 'iHandPos', 'iHandAction'
         ]
         self.uniforms = {
             name: GL.glGetUniformLocation(self.program, name)
@@ -207,6 +207,10 @@ class ShaderViewer:
             GL.glUniform4f(self.uniforms['iDate'], *uniforms.iDate)
         if self.uniforms['iSampleRate'] != -1:
             GL.glUniform1f(self.uniforms['iSampleRate'], uniforms.iSampleRate)
+        if self.uniforms['iHandPos'] != -1:
+            GL.glUniform3f(self.uniforms['iHandPos'], *uniforms.iHandPos)
+        if self.uniforms['iHandAction'] != -1:
+            GL.glUniform1f(self.uniforms['iHandAction'], uniforms.iHandAction)
 
         # Update channel textures
         for i, channel in enumerate(uniforms.iChannels):
@@ -313,7 +317,7 @@ class Shader:
         # Get uniform locations
         uniform_names = [
             'iResolution', 'iTime', 'iTimeDelta', 'iFrameRate', 'iFrame',
-            'iMouse', 'iDate', 'iSampleRate'
+            'iMouse', 'iDate', 'iSampleRate', 'iHandPos', 'iHandAction'
         ]
         self.uniforms = {
             name: GL.glGetUniformLocation(self.program, name)
@@ -354,6 +358,10 @@ class Shader:
             GL.glUniform1i(self.uniforms['iFrame'], uniforms.iFrame)
         if self.uniforms['iSampleRate'] != -1:
             GL.glUniform1f(self.uniforms['iSampleRate'], uniforms.iSampleRate)
+        if self.uniforms['iHandPos'] != -1:
+            GL.glUniform3f(self.uniforms['iHandPos'], *uniforms.iHandPos)
+        if self.uniforms['iHandAction'] != -1:
+            GL.glUniform1f(self.uniforms['iHandAction'], uniforms.iHandAction)
 
         # Update channel textures
         for i, channel in enumerate(uniforms.iChannels):

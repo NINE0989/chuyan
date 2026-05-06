@@ -23,7 +23,15 @@ def _ensure_version(code: str) -> str:
 def run_shader_viewer(shader_path: str, width: int = 1280, height: int = 360, monitor_index: int | None = None):
     """Target executed inside child process to render given shader."""
     try:
-        app = ShaderToyApp(shader_path, width, height, borderless=True, monitor_index=monitor_index, center=False)
+        app = ShaderToyApp(
+            shader_path,
+            width,
+            height,
+            borderless=True,
+            monitor_index=monitor_index,
+            center=False,
+            gesture_mode="remote",
+        )
         app.run()
     except Exception as e:  # pragma: no cover - runtime logging
         print(f"[BorderlessViewer] Failed: {e}")
