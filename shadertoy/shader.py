@@ -154,7 +154,8 @@ class ShaderViewer:
         # Get uniform locations
         uniform_names = [
             'iResolution', 'iTime', 'iTimeDelta', 'iFrameRate', 'iFrame',
-            'iMouse', 'iDate', 'iSampleRate', 'iHandPos', 'iHandAction'
+            'iMouse', 'iDate', 'iSampleRate', 'iHandPos', 'iHandAction',
+            'iHandDepthRef', 'iPinchEnabled', 'iSatControl', 'iDisturbControl'
         ]
         self.uniforms = {
             name: GL.glGetUniformLocation(self.program, name)
@@ -211,6 +212,14 @@ class ShaderViewer:
             GL.glUniform3f(self.uniforms['iHandPos'], *uniforms.iHandPos)
         if self.uniforms['iHandAction'] != -1:
             GL.glUniform1f(self.uniforms['iHandAction'], uniforms.iHandAction)
+        if self.uniforms['iHandDepthRef'] != -1:
+            GL.glUniform1f(self.uniforms['iHandDepthRef'], uniforms.iHandDepthRef)
+        if self.uniforms['iPinchEnabled'] != -1:
+            GL.glUniform1f(self.uniforms['iPinchEnabled'], uniforms.iPinchEnabled)
+        if self.uniforms['iSatControl'] != -1:
+            GL.glUniform1f(self.uniforms['iSatControl'], uniforms.iSatControl)
+        if self.uniforms['iDisturbControl'] != -1:
+            GL.glUniform1f(self.uniforms['iDisturbControl'], uniforms.iDisturbControl)
 
         # Update channel textures
         for i, channel in enumerate(uniforms.iChannels):
@@ -317,7 +326,8 @@ class Shader:
         # Get uniform locations
         uniform_names = [
             'iResolution', 'iTime', 'iTimeDelta', 'iFrameRate', 'iFrame',
-            'iMouse', 'iDate', 'iSampleRate', 'iHandPos', 'iHandAction'
+            'iMouse', 'iDate', 'iSampleRate', 'iHandPos', 'iHandAction',
+            'iHandDepthRef', 'iPinchEnabled', 'iSatControl', 'iDisturbControl'
         ]
         self.uniforms = {
             name: GL.glGetUniformLocation(self.program, name)
@@ -362,6 +372,14 @@ class Shader:
             GL.glUniform3f(self.uniforms['iHandPos'], *uniforms.iHandPos)
         if self.uniforms['iHandAction'] != -1:
             GL.glUniform1f(self.uniforms['iHandAction'], uniforms.iHandAction)
+        if self.uniforms['iHandDepthRef'] != -1:
+            GL.glUniform1f(self.uniforms['iHandDepthRef'], uniforms.iHandDepthRef)
+        if self.uniforms['iPinchEnabled'] != -1:
+            GL.glUniform1f(self.uniforms['iPinchEnabled'], uniforms.iPinchEnabled)
+        if self.uniforms['iSatControl'] != -1:
+            GL.glUniform1f(self.uniforms['iSatControl'], uniforms.iSatControl)
+        if self.uniforms['iDisturbControl'] != -1:
+            GL.glUniform1f(self.uniforms['iDisturbControl'], uniforms.iDisturbControl)
 
         # Update channel textures
         for i, channel in enumerate(uniforms.iChannels):

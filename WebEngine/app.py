@@ -24,4 +24,4 @@ def run():
 
 
 if __name__ == "__main__":  # pragma: no cover
-    sys.exit(run())
+    sys.exit(run()) 

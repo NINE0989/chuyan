@@ -2,6 +2,7 @@
 from __future__ import annotations
 import os
 import time
+import traceback
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional
@@ -9,7 +10,7 @@ from typing import Callable, Optional
 from PyQt5.QtCore import QThread, pyqtSignal, QTimer
 from PyQt5.QtWidgets import (
     QWidget, QFrame, QHBoxLayout, QVBoxLayout, QLabel, QPushButton, QScrollArea,
-    QLineEdit, QTextEdit, QSizePolicy, QFileDialog, QCheckBox
+    QLineEdit, QTextEdit, QSizePolicy, QFileDialog, QCheckBox, QSlider
 )
 from PyQt5.QtGui import QFont
 from PyQt5.QtCore import Qt
@@ -21,6 +22,7 @@ except Exception:
 
 from WebEngine.ai_service import AIService
 from ..paths import SHADERS_DIR
+from shadertoy.audio import AudioSource
 
 # ---------------- Data & Worker -----------------
 @dataclass
@@ -53,6 +55,50 @@ class GenerationWorker(QThread):
             import traceback
             err_msg = str(e) + "\n" + traceback.format_exc()
             self.finished.emit(GenerationResult(False, error=err_msg))
+
+class AudioThread(QThread):
+    """Background audio capture thread for the main preview widget."""
+
+    newData = pyqtSignal(object)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.audio: Optional[AudioSource] = None
+        self.is_running = False
+
+    def run(self):  # pragma: no cover - thread
+        try:
+            self.audio = AudioSource()
+            self.audio.start_capture()
+            self.is_running = True
+            print("[AudioThread] Audio capture started.")
+        except Exception as e:  # noqa: BLE001
+            print(f"[AudioThread] Error starting audio capture: {e}")
+            print(traceback.format_exc())
+            self.is_running = False
+            return
+
+        while self.is_running:
+            try:
+                self.audio.update()
+                texture_data = self.audio.get_texture_data()
+                if texture_data is not None:
+                    self.newData.emit(texture_data)
+            except Exception as e:  # noqa: BLE001
+                print(f"[AudioThread] Error during update: {e}")
+                print(traceback.format_exc())
+            self.msleep(10)
+
+    def stop(self):
+        print("[AudioThread] Stopping...")
+        self.is_running = False
+        if self.audio:
+            try:
+                self.audio.stop_capture()
+            except Exception:
+                print(traceback.format_exc())
+        self.wait()
+        print("[AudioThread] Stopped.")
 # ---------------- UI Elements -----------------
 class ChatBubble(QFrame):
     def __init__(self, text: str, is_user: bool = False):
@@ -105,6 +151,9 @@ class MainPage(QWidget):
         self.reload_timer = None  # type: Optional[QTimer]
         self.is_dirty = False
         self.attach_code_enabled = False
+        self.audio_thread: Optional[AudioThread] = None
+        self.sat_value = 0.2
+        self.disturb_value = 1.0
 
         self._build_ui()
         self._init_ai()
@@ -176,6 +225,40 @@ class MainPage(QWidget):
         """); self.apply_btn.clicked.connect(self.apply_shader); bottom_bar_layout.addWidget(self.apply_btn)
         shader_layout.addWidget(shader_bottom_bar)
 
+        controls_frame = QFrame()
+        controls_frame.setStyleSheet("QFrame { background-color: #f2f2f2; border-radius: 8px; }")
+        controls_layout = QVBoxLayout(controls_frame)
+        controls_layout.setContentsMargins(10, 8, 10, 8)
+        controls_layout.setSpacing(6)
+
+        sat_row = QHBoxLayout()
+        self.sat_label = QLabel("饱和度: 0.20")
+        self.sat_slider = QSlider(Qt.Horizontal)
+        self.sat_slider.setRange(0, 100)
+        self.sat_slider.setValue(20)
+        self.sat_slider.valueChanged.connect(self._on_sat_slider_changed)
+        sat_row.addWidget(self.sat_label)
+        sat_row.addWidget(self.sat_slider, 1)
+        controls_layout.addLayout(sat_row)
+
+        disturb_row = QHBoxLayout()
+        self.disturb_label = QLabel("扰动幅度: 1.00")
+        self.disturb_slider = QSlider(Qt.Horizontal)
+        self.disturb_slider.setRange(0, 200)
+        self.disturb_slider.setValue(100)
+        self.disturb_slider.valueChanged.connect(self._on_disturb_slider_changed)
+        disturb_row.addWidget(self.disturb_label)
+        disturb_row.addWidget(self.disturb_slider, 1)
+        controls_layout.addLayout(disturb_row)
+
+        pinch_row = QHBoxLayout()
+        self.pinch_checkbox = QCheckBox("启用握拳检测")
+        self.pinch_checkbox.setChecked(True)
+        self.pinch_checkbox.stateChanged.connect(self._on_pinch_checkbox_changed)
+        pinch_row.addWidget(self.pinch_checkbox)
+        pinch_row.addStretch()
+        controls_layout.addLayout(pinch_row)
+
         self.code_preview = QTextEdit(); self.code_preview.setReadOnly(False); self.code_preview.setStyleSheet("""
             QTextEdit { background-color: black; color: white; font-family: Consolas; font-size: 13px; border-radius: 8px; }
         """)
@@ -191,7 +274,9 @@ class MainPage(QWidget):
         """)
         self.hot_reload_btn.clicked.connect(self._toggle_hot_reload)
 
-        right_panel.addWidget(self.shader_container); right_panel.addWidget(self.code_preview)
+        right_panel.addWidget(self.shader_container)
+        right_panel.addWidget(controls_frame)
+        right_panel.addWidget(self.code_preview)
         main_layout.addLayout(chat_area,2); main_layout.addLayout(right_panel,3)
         root_layout = QVBoxLayout(); root_layout.addWidget(top_bar); root_layout.addLayout(main_layout); self.setLayout(root_layout)
 
@@ -434,8 +519,59 @@ class MainPage(QWidget):
     # --- Preview logic ---
     def _on_preview_initialized(self):
         self.preview_ready = True
+        if self.audio_thread is None:
+            self.audio_thread = AudioThread(self)
+            self.audio_thread.newData.connect(self.update_audio_texture)
+
+        fft_size = self.audio_thread.audio.fft_size if self.audio_thread and self.audio_thread.audio else 512
+        try:
+            self.preview_widget.setup_audio_texture(fft_size)
+        except Exception as e:  # noqa: BLE001
+            print(f"[Preview] setup_audio_texture 失败: {e}")
+
+        if self.audio_thread and not self.audio_thread.isRunning():
+            self.audio_thread.start()
+
+        # Apply control defaults to preview uniforms
+        self.preview_widget.uniforms.iSatControl = float(self.sat_value)
+        self.preview_widget.uniforms.iDisturbControl = float(self.disturb_value)
+
         if self._pending_code:
             code = self._pending_code; self._pending_code = None; self._write_and_load_preview(code)
+
+    def _on_sat_slider_changed(self, value: int):
+        self.sat_value = max(0.0, min(1.0, value / 100.0))
+        self.sat_label.setText(f"饱和度: {self.sat_value:.2f}")
+        try:
+            self.preview_widget.uniforms.iSatControl = float(self.sat_value)
+        except Exception:
+            pass
+
+    def _on_disturb_slider_changed(self, value: int):
+        self.disturb_value = max(0.0, min(2.0, value / 100.0))
+        self.disturb_label.setText(f"扰动幅度: {self.disturb_value:.2f}")
+        try:
+            self.preview_widget.uniforms.iDisturbControl = float(self.disturb_value)
+        except Exception:
+            pass
+
+    def _on_pinch_checkbox_changed(self, state):
+        """Handle pinch detection checkbox state change."""
+        pinch_enabled = 1.0 if self.pinch_checkbox.isChecked() else 0.0
+        try:
+            self.preview_widget.uniforms.iPinchEnabled = pinch_enabled
+            # 同时更新gesture tracker的设置
+            if hasattr(self.preview_widget, 'gesture') and self.preview_widget.gesture:
+                self.preview_widget.gesture.set_pinch_enabled(bool(pinch_enabled))
+        except Exception:
+            pass
+
+    def update_audio_texture(self, texture_data):
+        """Updates the iChannel0 texture with new data from the audio thread."""
+        try:
+            self.preview_widget.update_channel_texture_data(0, texture_data)
+        except Exception as e:  # noqa: BLE001
+            print(f"[Preview] update_audio_texture 失败: {e}")
 
     def _write_and_load_preview(self, code: str):
         try:
@@ -495,6 +631,14 @@ class MainPage(QWidget):
         if len(lines) > 12: lines = lines[:12] + ['... (更多省略)']
         self._add_ai_message('❌ 编译失败:\n' + '\n'.join(lines))
         # compile error doesn't change dirty flag
+
+    def closeEvent(self, event):
+        if self.audio_thread is not None:
+            try:
+                self.audio_thread.stop()
+            except Exception as e:  # noqa: BLE001
+                print(f"[MainPage] stop audio thread failed: {e}")
+        super().closeEvent(event)
 
     # --- Dirty indicator helper ---
     def _set_dirty(self, dirty: bool):

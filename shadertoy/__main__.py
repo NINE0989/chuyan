@@ -114,16 +114,20 @@ class ShaderToyApp:
 
         # Update hand tracking uniforms
         if getattr(self, '_gesture_started', False) and self.gesture is not None:
-            hand_pos, hand_action = self.gesture.get_gesture_data()
+            hand_pos, hand_action, hand_depth_ref = self.gesture.get_gesture_data()
             self.uniforms.iHandPos = (
                 float(hand_pos[0]),
                 float(hand_pos[1]),
                 float(hand_pos[2]),
             )
             self.uniforms.iHandAction = float(hand_action)
+            self.uniforms.iHandDepthRef = float(hand_depth_ref)
+            self.uniforms.iPinchEnabled = 1.0 if self.gesture.is_pinch_enabled() else 0.0
         else:
             self.uniforms.iHandPos = (0.0, 0.0, 0.0)
             self.uniforms.iHandAction = 0.0
+            self.uniforms.iHandDepthRef = 0.0
+            self.uniforms.iPinchEnabled = 1.0
         
         # Update date
         now = datetime.datetime.now()

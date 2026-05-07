@@ -34,6 +34,7 @@ class AudioSource:
         self._lock = threading.Lock()
         self._thread = None
         self._running = False
+        self._stream = None
         self.pa = pyaudio.PyAudio()
 
     def start_capture(self, prefer_loopback: bool = True, device_index: Optional[int] = None) -> None:
@@ -82,6 +83,14 @@ class AudioSource:
                 input=True,
                 input_device_index=default_speakers["index"],
         )
+
+        print(
+            "[audio] capture device="
+            f"{default_speakers['name']} | channels={default_speakers['maxInputChannels']} "
+            f"| sample_rate={int(default_speakers['defaultSampleRate'])} "
+            f"| chunk_size={self.chunk_size} frames "
+            f"| chunk_bytes={self.chunk_size * max(1, int(default_speakers['maxInputChannels'])) * 2}"
+        )
         
         self._running = True
         self._thread = threading.Thread(target=self._reader, daemon=True)
@@ -98,9 +107,11 @@ class AudioSource:
             self._stream = None
 
     def _reader(self):
+        frame_counter = 0
         while self._running and self._stream is not None:
             try:
                 data = self._stream.read(self.chunk_size, exception_on_overflow=False)
+                frame_counter += 1
                 # If stream is paInt16, convert to float32 in range -1..1
                 arr = np.frombuffer(data, dtype=np.int16)
                 arr = arr.astype(np.float32) / 32768.0
@@ -126,6 +137,15 @@ class AudioSource:
 
                 with self._lock:
                     self._audio_buffer = arr.astype(np.float32)
+
+                if frame_counter % 60 == 0:
+                    with self._lock:
+                        buf_peak = float(np.max(np.abs(self._audio_buffer))) if self._audio_buffer.size else 0.0
+                    print(
+                        f"[audio] read_frame={frame_counter} "
+                        f"raw_bytes={len(data)} raw_samples={arr.size} "
+                        f"buffer_len={self._audio_buffer.size} buffer_peak={buf_peak:.6f}"
+                    )
             except Exception as e:
                 logger.error(f"Audio read error: {e}")
 

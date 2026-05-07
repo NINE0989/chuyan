@@ -35,12 +35,15 @@ class GestureTracker:
 
         self._hand_pos = np.array([0.0, 0.0, 0.0], dtype=np.float32)
         self._hand_action = 0.0
+        self._hand_depth_ref = 0.0  # 手掌中心深度参考，用于补偿深度变化导致的xy跳变
+        self._pinch_enabled = True  # 握拳检测开关（默认开启）
 
         self.thread = None
         self.cap = None
         self._landmarker = None
         self._pub_thread = None
         self._pipe_listener = None
+        self._frame_log_counter = 0
 
     def _resolve_model_path(self, model_path: str | None) -> Path:
         candidates = []
@@ -73,7 +76,17 @@ class GestureTracker:
     def get_gesture_data(self):
         """Return a copy of the current gesture data thread-safely."""
         with self._lock:
-            return self._hand_pos.copy(), self._hand_action
+            return self._hand_pos.copy(), self._hand_action, self._hand_depth_ref
+
+    def set_pinch_enabled(self, enabled: bool):
+        """Enable or disable pinch/grip detection."""
+        with self._lock:
+            self._pinch_enabled = enabled
+
+    def is_pinch_enabled(self) -> bool:
+        """Check if pinch detection is enabled."""
+        with self._lock:
+            return self._pinch_enabled
 
     def start_capture(self):
         if self._running:
@@ -87,12 +100,25 @@ class GestureTracker:
 
             self._require_local_model()
 
-            self.cap = cv2.VideoCapture(self.camera_index)
+            # 尽量降低摄像头内部缓冲，减少“读到旧帧”的延迟
+            backend = getattr(cv2, "CAP_DSHOW", None)
+            if backend is not None and os.name == "nt":
+                self.cap = cv2.VideoCapture(self.camera_index, backend)
+            else:
+                self.cap = cv2.VideoCapture(self.camera_index)
             if not self.cap.isOpened():
                 raise RuntimeError(
                     f"Could not open camera {self.camera_index}. "
                     "可能原因包括：摄像头被占用、Windows 隐私设置禁止桌面应用访问摄像头，或设备索引不正确。"
                 )
+
+            try:
+                self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+                self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+                self.cap.set(cv2.CAP_PROP_FPS, 30)
+            except Exception:
+                pass
 
             base_options = mp_tasks.BaseOptions(model_asset_path=str(self.model_path))
             options = vision.HandLandmarkerOptions(
@@ -160,15 +186,21 @@ class GestureTracker:
 
         smooth_pos = np.array([0.0, 0.0, 0.0], dtype=np.float32)
         smooth_action = 0.0
-        alpha = 0.3
+        # 降低平滑带来的时滞，位置比动作更重要
+        # 改进：手腕比手指尖更稳定，可以用更强的平滑（更小的alpha）来消除微小波动
+        alpha_pos = float(os.environ.get("SHADERTOY_GESTURE_POS_ALPHA", "0.45"))
+        alpha_action = float(os.environ.get("SHADERTOY_GESTURE_ACTION_ALPHA", "0.4"))
 
         try:
             while self._running:
+                loop_start = time.perf_counter()
                 success, frame = self.cap.read()
                 if not success:
                     time.sleep(0.01)
                     continue
+                read_ms = (time.perf_counter() - loop_start) * 1000.0
 
+                detect_start = time.perf_counter()
                 image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 image = cv2.flip(image, 1)
                 mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=image)
@@ -184,33 +216,61 @@ class GestureTracker:
 
                 target_pos = np.array([0.0, 0.0, 0.0], dtype=np.float32)
                 target_action = 0.0
+                target_depth_ref = 0.0
 
                 if results.hand_landmarks:
                     hand_landmarks = results.hand_landmarks[0]
-                    index_tip = hand_landmarks[8]
-                    target_pos = np.array([index_tip.x, 1.0 - index_tip.y, index_tip.z], dtype=np.float32)
+                    
+                    # 焦点坐标：使用手腕(landmark 0)而非手指尖(landmark 8)作为焦点源
+                    # 原因: 手腕随手部整体运动，不受手指弯曲影响，更稳定
+                    wrist = hand_landmarks[0]
+                    target_pos = np.array([wrist.x, 1.0 - wrist.y, wrist.z], dtype=np.float32)
+                    
+                    # 计算手掌中心深度参考: 手腕(0) + 中指尖(12) + 无名指尖(16) 的平均
+                    # 用作深度感知补偿的参考值
+                    palm_depth = (hand_landmarks[0].z + hand_landmarks[12].z + hand_landmarks[16].z) / 3.0
+                    target_depth_ref = float(palm_depth)
 
-                    thumb_tip = hand_landmarks[4]
-                    dx = thumb_tip.x - index_tip.x
-                    dy = thumb_tip.y - index_tip.y
-                    dz = thumb_tip.z - index_tip.z
-                    dist = (dx**2 + dy**2 + dz**2) ** 0.5
+                    # 握拳检测：只基于xy距离（忽略z方向波动）
+                    # 这样可以避免深度变化导致的握拳状态频繁抖动
+                    # 握拳时=默认大小，张开时=放大
+                    if self._pinch_enabled:
+                        thumb_tip = hand_landmarks[4]
+                        index_tip = hand_landmarks[8]
+                        dx = thumb_tip.x - index_tip.x
+                        dy = thumb_tip.y - index_tip.y
+                        # 仅使用xy平面距离，忽略z方向噪声
+                        dist = (dx**2 + dy**2) ** 0.5
 
-                    pinch_max = 0.02
-                    pinch_min = 0.1
-                    if dist <= pinch_max:
-                        target_action = 1.0
-                    elif dist >= pinch_min:
-                        target_action = 0.0
+                        pinch_max = 0.02
+                        pinch_min = 0.1
+                        if dist <= pinch_max:
+                            target_action = 1.0
+                        elif dist >= pinch_min:
+                            target_action = 0.0
+                        else:
+                            target_action = 1.0 - (dist - pinch_max) / (pinch_min - pinch_max)
                     else:
-                        target_action = 1.0 - (dist - pinch_max) / (pinch_min - pinch_max)
+                        # 握拳检测关闭，保持为握拳状态（target_action = 0.0）
+                        target_action = 0.0
 
-                smooth_pos = smooth_pos * (1 - alpha) + target_pos * alpha
-                smooth_action = smooth_action * (1 - alpha) + target_action * alpha
+                detect_ms = (time.perf_counter() - detect_start) * 1000.0
+
+                smooth_pos = smooth_pos * (1 - alpha_pos) + target_pos * alpha_pos
+                smooth_action = smooth_action * (1 - alpha_action) + target_action * alpha_action
 
                 with self._lock:
                     self._hand_pos = smooth_pos
                     self._hand_action = smooth_action
+                    self._hand_depth_ref = target_depth_ref
+
+                self._frame_log_counter += 1
+                if self._frame_log_counter % 60 == 0:
+                    total_ms = (time.perf_counter() - loop_start) * 1000.0
+                    print(
+                        f"[gesture] frame={self._frame_log_counter} read_ms={read_ms:.1f} "
+                        f"detect_ms={detect_ms:.1f} total_ms={total_ms:.1f}"
+                    )
 
         finally:
             if self._landmarker is not None:
@@ -243,6 +303,7 @@ class GestureTracker:
                                 float(self._hand_pos[1]),
                                 float(self._hand_pos[2]),
                                 float(self._hand_action),
+                                float(self._hand_depth_ref),
                             )
 
                         try:
@@ -250,7 +311,7 @@ class GestureTracker:
                         except (EOFError, BrokenPipeError, OSError):
                             break
 
-                        time.sleep(1.0 / 30.0)
+                        time.sleep(1.0 / 60.0)
                 finally:
                     try:
                         conn.close()
@@ -285,13 +346,14 @@ class GestureTracker:
                     except EOFError:
                         break
 
-                    if not payload or len(payload) != 4:
+                    if not payload or len(payload) != 5:
                         continue
 
-                    x, y, z, a = payload
+                    x, y, z, a, depth_ref = payload
                     with self._lock:
                         self._hand_pos = np.array([x, y, z], dtype=np.float32)
                         self._hand_action = float(a)
+                        self._hand_depth_ref = float(depth_ref)
 
             except Exception as e:
                 error_text = str(e)
