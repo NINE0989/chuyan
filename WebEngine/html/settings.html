@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MusicShader - API 设置</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: #1a1a2e; color: #e0e0e0; min-height: 100vh;
+    display: flex; justify-content: center; align-items: center; padding: 20px;
+}
+.container { width: 100%; max-width: 580px; }
+h1 { font-size: 24px; font-weight: 600; text-align: center; margin-bottom: 24px; color: #fff; }
+h1 span { color: #6366f1; }
+
+/* 预设卡片 */
+.preset-row { display: flex; gap: 12px; margin-bottom: 20px; }
+.preset-card {
+    flex: 1; padding: 14px 16px; border-radius: 12px; cursor: pointer;
+    background: #16213e; border: 2px solid transparent; transition: all .2s;
+    text-align: center;
+}
+.preset-card:hover { border-color: #6366f1; background: #1a2744; }
+.preset-card.active { border-color: #6366f1; background: #1e2d50; }
+.preset-card .name { font-weight: 600; font-size: 15px; color: #fff; }
+.preset-card .desc { font-size: 12px; color: #888; margin-top: 4px; }
+
+/* 表单卡片 */
+.card {
+    background: #16213e; border-radius: 14px; padding: 24px;
+    margin-bottom: 16px; border: 1px solid #1e2d50;
+}
+.card-title { font-size: 14px; font-weight: 600; color: #888; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+.form-group { margin-bottom: 16px; }
+.form-group:last-child { margin-bottom: 0; }
+label { display: block; font-size: 13px; color: #aaa; margin-bottom: 6px; }
+.input-row { display: flex; gap: 8px; align-items: center; }
+input {
+    flex: 1; padding: 10px 14px; border-radius: 8px; border: 1px solid #2a2a4a;
+    background: #0f0f23; color: #e0e0e0; font-size: 14px; outline: none; transition: border-color .2s;
+}
+input:focus { border-color: #6366f1; }
+input::placeholder { color: #555; }
+.btn-icon {
+    padding: 10px 14px; border-radius: 8px; border: 1px solid #2a2a4a;
+    background: #0f0f23; color: #aaa; cursor: pointer; font-size: 14px; transition: all .2s;
+    white-space: nowrap;
+}
+.btn-icon:hover { border-color: #6366f1; color: #fff; }
+
+/* 保存按钮 */
+.btn-save {
+    width: 100%; padding: 14px; border-radius: 12px; border: none;
+    background: #6366f1; color: #fff; font-size: 16px; font-weight: 600;
+    cursor: pointer; transition: all .2s; margin-top: 8px;
+}
+.btn-save:hover { background: #5558e6; transform: translateY(-1px); }
+.btn-save:active { transform: translateY(0); }
+
+/* 状态提示 */
+.status {
+    text-align: center; margin-top: 12px; font-size: 13px; min-height: 20px;
+    transition: opacity .3s;
+}
+.status.success { color: #4ade80; }
+.status.error { color: #f87171; }
+
+/* 底部信息 */
+.footer { text-align: center; margin-top: 20px; font-size: 12px; color: #555; }
+</style>
+</head>
+<body>
+<div class="container">
+    <h1>MusicShader <span>⚙</span> 设置</h1>
+
+    <!-- 预设切换 -->
+    <div class="preset-row">
+        <div class="preset-card active" data-preset="openai" onclick="selectPreset('openai')">
+            <div class="name">OpenAI</div>
+            <div class="desc">gpt-4.1-mini</div>
+        </div>
+        <div class="preset-card" data-preset="deepseek" onclick="selectPreset('deepseek')">
+            <div class="name">DeepSeek</div>
+            <div class="desc">deepseek-chat</div>
+        </div>
+        <div class="preset-card" data-preset="custom" onclick="selectPreset('custom')">
+            <div class="name">自定义</div>
+            <div class="desc">手动配置</div>
+        </div>
+    </div>
+
+    <!-- API Key -->
+    <div class="card">
+        <div class="card-title">API 密钥</div>
+        <div class="form-group">
+            <label>API Key（用于 Chat + Whisper 语音识别）</label>
+            <div class="input-row">
+                <input type="password" id="api_key" placeholder="sk-..." autocomplete="off">
+                <button class="btn-icon" onclick="toggleKey()">👁</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- API 地址 + Model -->
+    <div class="card">
+        <div class="card-title">API 配置</div>
+        <div class="form-group">
+            <label>Base URL</label>
+            <input type="text" id="base_url" placeholder="https://api.openai.com/v1">
+        </div>
+        <div class="form-group">
+            <label>Model</label>
+            <input type="text" id="model" placeholder="gpt-4.1-mini">
+        </div>
+    </div>
+
+    <button class="btn-save" onclick="save()">💾 保存配置</button>
+    <div class="status" id="status"></div>
+    <div class="footer">MusicShader · 配置保存到 settings.json</div>
+</div>
+
+<script>
+const presets = {
+    openai:  { base_url: "https://api.openai.com/v1", model: "gpt-4.1-mini" },
+    deepseek:{ base_url: "https://api.deepseek.com/v1", model: "deepseek-chat" },
+};
+let currentPreset = "custom";
+
+function selectPreset(name) {
+    currentPreset = name;
+    document.querySelectorAll(".preset-card").forEach(c => c.classList.remove("active"));
+    document.querySelector(`[data-preset="${name}"]`).classList.add("active");
+    if (name !== "custom") {
+        document.getElementById("base_url").value = presets[name].base_url;
+        document.getElementById("model").value = presets[name].model;
+    }
+}
+
+function toggleKey() {
+    const el = document.getElementById("api_key");
+    el.type = el.type === "password" ? "text" : "password";
+}
+
+async function load() {
+    try {
+        const r = await fetch("/api/settings");
+        const d = await r.json();
+        if (d.api_key) document.getElementById("api_key").value = d.api_key;
+        if (d.base_url) document.getElementById("base_url").value = d.base_url;
+        if (d.model) document.getElementById("model").value = d.model;
+        // 推断预设
+        if (d.base_url === presets.openai.base_url && d.model === presets.openai.model) selectPreset("openai");
+        else if (d.base_url === presets.deepseek.base_url && d.model === presets.deepseek.model) selectPreset("deepseek");
+        else selectPreset("custom");
+        setStatus("已加载当前配置", "success");
+    } catch(e) {
+        setStatus("无法加载配置：" + e.message, "error");
+    }
+}
+
+async function save() {
+    const data = {
+        api_key: document.getElementById("api_key").value.trim(),
+        base_url: document.getElementById("base_url").value.trim(),
+        model: document.getElementById("model").value.trim(),
+    };
+    if (!data.base_url) { setStatus("Base URL 不能为空", "error"); return; }
+    if (!data.model) { setStatus("Model 不能为空", "error"); return; }
+    try {
+        const r = await fetch("/api/settings", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(data),
+        });
+        const d = await r.json();
+        if (d.ok) setStatus("✅ 配置已保存到 settings.json", "success");
+        else setStatus("保存失败：" + (d.error || "未知错误"), "error");
+    } catch(e) {
+        setStatus("保存失败：" + e.message, "error");
+    }
+}
+
+function setStatus(msg, cls) {
+    const el = document.getElementById("status");
+    el.textContent = msg;
+    el.className = "status " + cls;
+    if (cls === "success") setTimeout(() => { el.textContent = ""; el.className = "status"; }, 3000);
+}
+
+load();
+</script>
+</body>
+</html>

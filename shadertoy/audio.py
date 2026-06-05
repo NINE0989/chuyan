@@ -190,7 +190,7 @@ class AudioSource:
             self.frame_count += 1
         else:
             self.frame_count = 0
-        if self.frame_count % 100 == 0:  # 每100帧打印一次
+        if self.frame_count % 600 == 0:  # 约10秒打印一次
             print(f"[audio] frame={self.frame_count} tex_peak={tex_peak:.6f} buf_peak={buf_peak:.6f} running_peak={self._running_peak:.6f}")
 
     def get_fft_data(self) -> Optional[np.ndarray]:

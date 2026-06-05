@@ -169,7 +169,7 @@ class ShaderToyApp:
             pass
 
         # Log a basic diagnostic every 60 frames so user can confirm capture
-        if self.frame_count % 60 == 0:
+        if self.frame_count % 300 == 0:
             try:
                 import numpy as _np
                 peak = float(_np.max(texdata_fft)) if texdata_fft is not None else 0.0
