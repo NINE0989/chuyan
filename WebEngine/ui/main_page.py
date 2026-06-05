@@ -21,6 +21,8 @@ except Exception:
     from WebEngine.visualizer import VisualizerWidget  # type: ignore
 
 from WebEngine.ai_service import AIService
+from WebEngine.speech_service import SpeechService, TranscriptionResult
+from WebEngine.ui.settings_dialog import SettingsDialog
 from ..paths import SHADERS_DIR
 from shadertoy.audio import AudioSource
 
@@ -99,6 +101,19 @@ class AudioThread(QThread):
                 print(traceback.format_exc())
         self.wait()
         print("[AudioThread] Stopped.")
+
+class _TranscriptionWorker(QThread):
+    """Background thread for Whisper API transcription."""
+    finished = pyqtSignal(object)  # TranscriptionResult
+
+    def __init__(self, service: SpeechService, wav_bytes: bytes):
+        super().__init__()
+        self.service = service
+        self.wav_bytes = wav_bytes
+
+    def run(self):
+        result = self.service.transcribe(self.wav_bytes)
+        self.finished.emit(result)
 # ---------------- UI Elements -----------------
 class ChatBubble(QFrame):
     def __init__(self, text: str, is_user: bool = False):
@@ -143,6 +158,7 @@ class MainPage(QWidget):
         self.current_shader = "// GLSL shader code will appear here"
         self.current_shader_path: Optional[str] = None
         self.ai_service: Optional[AIService] = None
+        self.speech_service: Optional[SpeechService] = None
         self.has_generated_once = False
         self.current_worker: Optional[GenerationWorker] = None
         self.preview_ready = False
@@ -175,6 +191,16 @@ class MainPage(QWidget):
         """)
         self.new_session_btn.clicked.connect(self.new_session)
         top_layout.addWidget(self.new_session_btn)
+        # Settings button
+        self.settings_btn = QPushButton("⚙")
+        self.settings_btn.setFixedSize(36, 36)
+        self.settings_btn.setToolTip("API 设置（DeepSeek / OpenAI）")
+        self.settings_btn.setStyleSheet("""
+            QPushButton { background-color: #1c1c1c; color: white; border-radius: 18px; font-size: 16px; }
+            QPushButton:hover { background-color: #333333; }
+        """)
+        self.settings_btn.clicked.connect(self._open_settings)
+        top_layout.addWidget(self.settings_btn)
         top_layout.addStretch(); top_layout.addWidget(btn_shader); top_bar.setLayout(top_layout)
 
         main_layout = QHBoxLayout(); main_layout.setContentsMargins(0,0,0,0)
@@ -196,7 +222,18 @@ class MainPage(QWidget):
             QPushButton { background-color: #1c1c1c; color: white; border-radius: 4px; padding: 8px 16px; }
             QPushButton:hover { background-color: #333333; }
         """); send_btn.clicked.connect(self.send_message)
-        input_layout.addWidget(self.input_box,1); input_layout.addWidget(self.attach_code_cb); input_layout.addWidget(send_btn); chat_area.addLayout(input_layout)
+        # Mic button
+        self.mic_btn = QPushButton("🎤")
+        self.mic_btn.setFixedSize(40, 40)
+        self.mic_btn.setToolTip("长按录音，松开后语音识别")
+        self.mic_btn.setStyleSheet("""
+            QPushButton { background-color: #1c1c1c; color: white; border-radius: 20px; font-size: 18px; }
+            QPushButton:hover { background-color: #333333; }
+            QPushButton:pressed { background-color: #cc3333; }
+        """)
+        self.mic_btn.pressed.connect(self._on_mic_pressed)
+        self.mic_btn.released.connect(self._on_mic_released)
+        input_layout.addWidget(self.input_box,1); input_layout.addWidget(self.mic_btn); input_layout.addWidget(self.attach_code_cb); input_layout.addWidget(send_btn); chat_area.addLayout(input_layout)
 
         right_panel = QVBoxLayout(); right_panel.setContentsMargins(10,15,15,15); right_panel.setSpacing(10)
         self.shader_container = QFrame(); self.shader_container.setStyleSheet("QFrame { background-color: #e0e0e0; border-radius: 8px; }")
@@ -297,9 +334,13 @@ class MainPage(QWidget):
     def _init_ai(self):
         try:
             self.ai_service = AIService()
-            self._add_ai_message("🤖 AI 已直接连接，输入描述生成 Shader。后续消息将进行微调。")
+            self.speech_service = SpeechService()
+            api_ok = self.speech_service.api_available
+            mic_status = "🎤 语音可用" if api_ok else "⚠️ 未配置 API Key，语音输入暂不可用"
+            self._add_ai_message(f"🤖 AI 已直接连接，输入描述生成 Shader。{mic_status}")
         except Exception as e:  # noqa: BLE001
             self.ai_service = None
+            self.speech_service = None
             self._add_ai_message(f"❌ AI初始化失败: {e}")
 
     # --- Chat helpers ---
@@ -343,6 +384,76 @@ class MainPage(QWidget):
         self._add_ai_message("✅ Shader 生成完成，已加载预览，可点“应用”查看代码或“♡”收藏。")
         self.code_preview.setText(self.current_shader)
         self._auto_save_latest(); self._update_preview_from_code(); self._set_dirty(True)
+
+    # --- Voice input ---
+    def _on_mic_pressed(self):
+        if self.speech_service is None:
+            self._add_ai_message("❌ 语音服务未初始化"); return
+        if self.speech_service.is_recording:
+            return
+        try:
+            self.speech_service.start_recording()
+            self._recording_start = time.time()
+            self.mic_btn.setText("⏺")
+            self.mic_btn.setStyleSheet("QPushButton { background-color: #cc3333; color: white; border-radius: 20px; font-size: 18px; }")
+        except Exception as e:
+            self._add_ai_message(f"❌ 录音启动失败: {e}")
+
+    def _on_mic_released(self):
+        if self.speech_service is None or not self.speech_service.is_recording:
+            return
+        try:
+            wav_bytes = self.speech_service.stop_recording()
+            duration = time.time() - getattr(self, '_recording_start', time.time())
+        except Exception as e:
+            self._add_ai_message(f"❌ 录音停止失败: {e}")
+            self._reset_mic_button(); return
+        self._reset_mic_button()
+        if len(wav_bytes) < 800:
+            return
+        self._add_ai_message(f"🎙 录音 {duration:.1f}s，正在识别…")
+        worker = _TranscriptionWorker(self.speech_service, wav_bytes)
+        worker.finished.connect(self._on_transcription_ready)
+        worker.start()
+
+    def _reset_mic_button(self):
+        self.mic_btn.setText("🎤")
+        self.mic_btn.setStyleSheet("""
+            QPushButton { background-color: #1c1c1c; color: white; border-radius: 20px; font-size: 18px; }
+            QPushButton:hover { background-color: #333333; }
+            QPushButton:pressed { background-color: #cc3333; }
+        """)
+
+    def _on_transcription_ready(self, result):
+        if not result.success:
+            self._add_ai_message(f"❌ 语音识别失败: {result.error}"); return
+        text = result.text.strip()
+        if not text:
+            self._add_ai_message("⚠️ 未识别到语音内容"); return
+        self.input_box.setText(text)
+        self._add_ai_message(f"🎤 {text}")
+
+    # --- Settings ---
+    def _open_settings(self):
+        dlg = SettingsDialog(self)
+        if dlg.exec_():
+            # 重新检测 provider
+            if self.ai_service:
+                try:
+                    from WebEngine.settings import Settings
+                    s = Settings()
+                    self.ai_service.provider = "openai" if s.has_api_key else "mock"
+                except Exception:
+                    pass
+            if self.speech_service:
+                try:
+                    from WebEngine.settings import Settings
+                    s = Settings()
+                    self.speech_service._api_key = s.api_key
+                    self.speech_service._base_url = s.base_url
+                except Exception:
+                    pass
+            self._add_ai_message("✅ 设置已更新")
 
     # --- New session ---
     def new_session(self):

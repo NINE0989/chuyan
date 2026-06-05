@@ -1,4 +1,4 @@
-﻿"""AI Shader 生成 CLI：支持多 Agent 持续对话流程。"""
+﻿"""AI Shader 生成 CLI：使用 LangGraph Agent + tools 替代自建编排器。"""
 from __future__ import annotations
 
 import argparse
@@ -7,10 +7,13 @@ import subprocess
 import sys
 from pathlib import Path
 
+from langchain_core.messages import HumanMessage
+
+from ai_pipeline.agent import build_shader_agent
 from ai_pipeline.hooks.engine import GenerationHookEngine
-from ai_pipeline.mcp import build_mcp_adapter
-from ai_pipeline.orchestrator import MultiAgentOrchestrator
-from ai_pipeline.skills.library import build_skill_prompt
+from ai_pipeline.llm.adapter import build_llm
+from ai_pipeline.tools import get_all_tools
+from ai_pipeline.tools.shader_tools import extract_glsl_code
 from ai_pipeline.types import GenerateRequest, GenerateResult
 
 
@@ -31,19 +34,12 @@ def run_quality(root: Path, target_glsl: Path) -> dict[str, str | int]:
         "--target-glsl",
         str(target_glsl),
     ]
-    result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
     return {
         "returncode": result.returncode,
         "stdout": result.stdout.strip() if result.stdout else "",
         "stderr": result.stderr.strip() if result.stderr else "",
     }
-
-
-def _extract_glsl(text: str) -> str:
-    import re
-
-    m = re.search(r"(?is)```\s*(?:glsl)?\s*\n?(.*?)\n?```", text)
-    return m.group(1).strip() if m else text.strip()
 
 
 def generate(
@@ -53,23 +49,43 @@ def generate(
     session_id: str = "default",
     audio_array: list[float] | None = None,
 ) -> GenerateResult:
-    prompt_ctx = build_skill_prompt(
-        ["geometry_sdf", "audio_visualization", "style_specialization", "badcase_guard"]
+    # 构建 LLM + tools + agent
+    llm = build_llm(provider)
+    tools = get_all_tools()
+    agent = build_shader_agent(llm, tools)
+
+    # 构建用户消息
+    audio_summary = ""
+    if audio_array:
+        from ai_pipeline.tools.audio_tools import summarize_audio
+
+        audio_summary = summarize_audio.invoke({"audio_array": audio_array})
+
+    user_content = (
+        f"用户需求: {req.prompt}\n"
+        f"style_profile: {req.style_profile}\n"
+        f"音频摘要: {audio_summary}\n"
+        "请分析需求，按需调用工具（summarize_audio / infer_shader_style / get_skill_template / "
+        "validate_glsl_keywords 等），最终输出一个 ```glsl fenced code block 并保存。"
     )
 
-    adapter = build_mcp_adapter(provider)
-    orchestrator = MultiAgentOrchestrator(root, adapter)
-
-    merged_prompt = req.prompt + "\n" + prompt_ctx
-    raw_output, multi_diag = orchestrator.run(
-        session_id=session_id,
-        user_prompt=merged_prompt,
-        audio_array=audio_array or [],
-        style_profile=req.style_profile,
+    # 运行 Agent
+    result = agent.invoke(
+        {"messages": [HumanMessage(content=user_content)]},
+        config={"recursion_limit": 20},
     )
 
-    code = _extract_glsl(raw_output)
+    # 从 agent 最终消息提取 GLSL
+    messages = result.get("messages", [])
+    raw_output = ""
+    for msg in reversed(messages):
+        if hasattr(msg, "content") and msg.content:
+            raw_output = str(msg.content)
+            break
 
+    code = extract_glsl_code.invoke({"text": raw_output})
+
+    # 后处理：hooks + 保存 + 质量检查（保持与旧版一致）
     hook_engine = GenerationHookEngine(root)
     code = hook_engine.inject_header(code, req.style_profile)
     out_path = save_shader(code, root / "shaders" / "generated", "ai_generated_latest")
@@ -77,8 +93,13 @@ def generate(
     hook_results = hook_engine.run_hooks(out_path)
     quality = run_quality(root, out_path)
 
-    diagnostics = list(multi_diag)
-    diagnostics.append(f"生成文件: {out_path}")
+    diagnostics = [
+        f"session={session_id}",
+        f"style={req.style_profile}",
+        f"provider={provider}",
+        f"agent_has_tool_calls={str(any(hasattr(m, 'tool_calls') and m.tool_calls for m in messages if hasattr(m, 'tool_calls')))}",
+        f"生成文件: {out_path}",
+    ]
     diagnostics.extend([f"hook:{r.name}:{'ok' if r.ok else 'fail'}" for r in hook_results])
 
     tags = ["goodcase:baseline", f"style:{req.style_profile}", f"session:{session_id}"]
