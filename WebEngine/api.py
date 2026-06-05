@@ -82,6 +82,8 @@ class APIHandler(BaseHTTPRequestHandler):
             self._handle_list_shaders()
         elif path == "/api/shader":
             self._handle_get_shader(params.get("path", ""))
+        elif path == "/api/music":
+            self._handle_list_music(params.get("path", ""))
         else:
             self.send_error(404)
 
@@ -181,6 +183,66 @@ class APIHandler(BaseHTTPRequestHandler):
             self._send_json({"ok": True, "pid": proc.pid})
         except Exception as e:
             self._send_json({"ok": False, "error": str(e)}, 500)
+
+    # ---- Music Library ----
+    def _music_dir(self):
+        root = Path(__file__).resolve().parent.parent
+        d = root / "music"
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+
+    def _handle_list_music(self, sub_path: str = ""):
+        """GET /api/music → 列表；GET /api/music?path=... → 返回该文件的音频采样数据"""
+        music_dir = self._music_dir()
+
+        if sub_path:
+            # 返回指定文件的音频内容（JSON/CSV 格式的采样数组，或 WAV 文件的原始数据）
+            fp = music_dir / sub_path
+            if not fp.is_file():
+                self._send_json({"error": f"文件不存在: {sub_path}"}, 404)
+                return
+            try:
+                import numpy as np
+                # 尝试作为 JSON/CSV 采样数组加载
+                text = fp.read_text(encoding="utf-8-sig", errors="ignore").strip()
+                try:
+                    data = json.loads(text)
+                    if isinstance(data, list):
+                        samples = [float(x) for x in data]
+                        self._send_json({"name": fp.name, "samples": samples[:500], "total_length": len(samples)})
+                        return
+                except json.JSONDecodeError:
+                    pass
+                # CSV fallback
+                values = []
+                for token in text.replace("\n", ",").split(","):
+                    t = token.strip()
+                    if t:
+                        try: values.append(float(t))
+                        except ValueError: continue
+                self._send_json({"name": fp.name, "samples": values[:500], "total_length": len(values)})
+            except Exception as e:
+                self._send_json({"error": str(e)}, 500)
+        else:
+            # 列出所有音乐文件
+            files = []
+            if music_dir.is_dir():
+                for fp in sorted(music_dir.rglob("*"), key=lambda p: p.stat().st_mtime, reverse=True):
+                    if fp.is_file() and fp.suffix.lower() in (".json", ".csv", ".wav", ".mp3", ".txt"):
+                        try:
+                            st = fp.stat()
+                            rel = str(fp.relative_to(music_dir)).replace("\\", "/")
+                            files.append({
+                                "name": fp.name,
+                                "path": rel,
+                                "folder": str(fp.parent.relative_to(music_dir)).replace("\\", "/") if fp.parent != music_dir else "",
+                                "size": st.st_size,
+                                "suffix": fp.suffix.lower(),
+                                "modified": time.strftime("%Y-%m-%d %H:%M", time.localtime(st.st_mtime)),
+                            })
+                        except OSError:
+                            continue
+            self._send_json(files)
 
     # ---- Settings ----
     def _handle_save_settings(self, body: dict):

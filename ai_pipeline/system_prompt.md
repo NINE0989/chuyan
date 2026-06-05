@@ -24,6 +24,8 @@
 ### 音频分析
 - `summarize_audio`：计算音频数组的统计特征（长度/均值/峰值/抽样）
 - `load_audio_from_file`：从文件加载音频采样数组
+- `list_music_files`：列出 music/ 目录下所有音频文件（可指定子文件夹）
+- `find_music_by_name`：按名称搜索 music/ 目录下的音频文件
 
 ### 风格判断
 - `infer_shader_style`：从用户提示词推断着色器风格（neon/ink/glitch/minimal）
