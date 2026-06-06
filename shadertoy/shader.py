@@ -17,7 +17,7 @@ from .uniforms import ShaderToyUniforms, TextureChannel
 # It's replaced by the VisualizerWidget in visualizer.py
 class ShaderViewer:
     """OpenGL shader viewer with ShaderToy compatibility, test Version 1.0"""
-    VERTEX_SRC = '''#version 330 core
+    VERTEX_SRC = '''#version 330
     layout(location = 0) in vec2 aPos;
     layout(location = 1) in vec2 aUV;
     out vec2 vUV;
@@ -31,7 +31,9 @@ class ShaderViewer:
         if not glfw.init():
             raise RuntimeError('glfw.init() failed')
 
-        # Window creation
+        # Window creation — 强制桌面 OpenGL，避免回退到 OpenGL ES
+        glfw.window_hint(glfw.CLIENT_API, glfw.OPENGL_API)
+        glfw.window_hint(glfw.CONTEXT_CREATION_API, glfw.NATIVE_CONTEXT_API)
         glfw.window_hint(glfw.CONTEXT_VERSION_MAJOR, 3)
         glfw.window_hint(glfw.CONTEXT_VERSION_MINOR, 3)
         glfw.window_hint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE)
@@ -47,18 +49,26 @@ class ShaderViewer:
         glfw.make_context_current(self.window)
         self.width = width
         self.height = height
+
+        # 检测实际获得的 GL 版本，若为 ES 则启用兼容适配
+        gl_ver = GL.glGetString(GL.GL_VERSION)
+        if isinstance(gl_ver, bytes):
+            gl_ver = gl_ver.decode('utf-8', errors='replace')
+        self._is_gles = 'OpenGL ES' in gl_ver if isinstance(gl_ver, str) else False
+        print(f"[GL] {gl_ver}" + (" (ES compat mode)" if self._is_gles else ""))
+        if self._is_gles:
+            # 改写顶点着色器为 ES 兼容版本
+            self.VERTEX_SRC = self.VERTEX_SRC.replace('#version 330', '#version 300 es\nprecision mediump float;')
+
         # install key callback for ESC to close
         glfw.set_key_callback(self.window, self._on_key)
         self.setup_quad()
         self.uniforms: Dict[str, int] = {}
 
     # ---------------- input & window placement helpers -----------------
-    def _on_key(self, window, key, scancode, action, mods):  # pragma: no cover - GLFW callback
-        try:
-            if key == glfw.KEY_ESCAPE and action == glfw.PRESS:
-                glfw.set_window_should_close(self.window, True)
-        except Exception:
-            pass
+    def _on_key(self, window, key, scancode, action, mods):
+        if key == glfw.KEY_ESCAPE and action == glfw.PRESS:
+            glfw.set_window_should_close(self.window, True)
 
     def place_on_monitor(self, monitor_index: int = 0, center: bool = False, offset: tuple[int, int] | None = None):
         """Place window on the given monitor (multi-monitor setups). Fallback to primary.
@@ -146,6 +156,29 @@ class ShaderViewer:
 
         fs_src = _resolve_includes(fs_src, Path(path).parent)
 
+        # 剥离 BOM 和非法控制字符，避免 #version 解析失败
+        fs_src = fs_src.lstrip('\ufeff')
+        fs_src = fs_src.replace('\r\n', '\n').replace('\r', '\n')
+
+        # 运行时检测 GL 版本：若为 ES 则适配 shader
+        gl_ver_str = GL.glGetString(GL.GL_VERSION)
+        if isinstance(gl_ver_str, bytes):
+            gl_ver_str = gl_ver_str.decode('utf-8', errors='replace')
+        is_es = 'OpenGL ES' in gl_ver_str if isinstance(gl_ver_str, str) else False
+        if is_es:
+            # 改写顶点着色器
+            self.VERTEX_SRC = self.VERTEX_SRC.replace('#version 330', '#version 300 es')
+            if 'precision' not in self.VERTEX_SRC[:200]:
+                self.VERTEX_SRC = self.VERTEX_SRC.replace('#version 300 es', '#version 300 es\nprecision mediump float;')
+            # 改写片段着色器
+            fs_src = fs_src.replace('#version 330', '#version 300 es')
+            if 'precision' not in fs_src[:300]:
+                idx = fs_src.find('#version')
+                if idx >= 0:
+                    eol = fs_src.find('\n', idx)
+                    fs_src = fs_src[:eol + 1] + 'precision mediump float;\n' + fs_src[eol + 1:]
+            print(f"[GL] ES 兼容模式: 顶点/片段着色器已适配为 #version 300 es")
+
         # Compile shaders
         vs = self._compile_shader(self.VERTEX_SRC, GL.GL_VERTEX_SHADER)
         fs = self._compile_shader(fs_src, GL.GL_FRAGMENT_SHADER)
@@ -172,7 +205,9 @@ class ShaderViewer:
         GL.glCompileShader(shader)
         status = GL.glGetShaderiv(shader, GL.GL_COMPILE_STATUS)
         if not status:
-            log = GL.glGetShaderInfoLog(shader).decode('utf-8')
+            log = GL.glGetShaderInfoLog(shader)
+            if isinstance(log, bytes):
+                log = log.decode('utf-8')
             raise RuntimeError('Shader compile error:\n' + log)
         return shader
 
@@ -183,7 +218,9 @@ class ShaderViewer:
         GL.glLinkProgram(prog)
         status = GL.glGetProgramiv(prog, GL.GL_LINK_STATUS)
         if not status:
-            log = GL.glGetProgramInfoLog(prog).decode('utf-8')
+            log = GL.glGetProgramInfoLog(prog)
+            if isinstance(log, bytes):
+                log = log.decode('utf-8')
             raise RuntimeError('Program link error:\n' + log)
         return prog
 
@@ -270,7 +307,7 @@ class Shader:
     Manages a single GLSL shader program, including loading from file,
     handling #include directives, and updating uniforms.
     """
-    VERTEX_SRC = '''#version 330 core
+    VERTEX_SRC = '''#version 330
     layout(location = 0) in vec2 aPos;
     void main(){
         gl_Position = vec4(aPos, 0.0, 1.0);
@@ -318,6 +355,29 @@ class Shader:
 
         fs_src = _resolve_includes(fs_src, Path(path).parent)
 
+        # 剥离 BOM 和非法控制字符，避免 #version 解析失败
+        fs_src = fs_src.lstrip('\ufeff')
+        fs_src = fs_src.replace('\r\n', '\n').replace('\r', '\n')
+
+        # 运行时检测 GL 版本：若为 ES 则适配 shader
+        gl_ver_str = GL.glGetString(GL.GL_VERSION)
+        if isinstance(gl_ver_str, bytes):
+            gl_ver_str = gl_ver_str.decode('utf-8', errors='replace')
+        is_es = 'OpenGL ES' in gl_ver_str if isinstance(gl_ver_str, str) else False
+        if is_es:
+            # 改写顶点着色器
+            self.VERTEX_SRC = self.VERTEX_SRC.replace('#version 330', '#version 300 es')
+            if 'precision' not in self.VERTEX_SRC[:200]:
+                self.VERTEX_SRC = self.VERTEX_SRC.replace('#version 300 es', '#version 300 es\nprecision mediump float;')
+            # 改写片段着色器
+            fs_src = fs_src.replace('#version 330', '#version 300 es')
+            if 'precision' not in fs_src[:300]:
+                idx = fs_src.find('#version')
+                if idx >= 0:
+                    eol = fs_src.find('\n', idx)
+                    fs_src = fs_src[:eol + 1] + 'precision mediump float;\n' + fs_src[eol + 1:]
+            print(f"[GL] ES 兼容模式: 顶点/片段着色器已适配为 #version 300 es")
+
         # Compile shaders
         vs = self._compile_shader(self.VERTEX_SRC, GL.GL_VERTEX_SHADER)
         fs = self._compile_shader(fs_src, GL.GL_FRAGMENT_SHADER)
@@ -342,7 +402,9 @@ class Shader:
         GL.glShaderSource(shader, src)
         GL.glCompileShader(shader)
         if not GL.glGetShaderiv(shader, GL.GL_COMPILE_STATUS):
-            log = GL.glGetShaderInfoLog(shader).decode('utf-8')
+            log = GL.glGetShaderInfoLog(shader)
+            if isinstance(log, bytes):
+                log = log.decode('utf-8')
             raise RuntimeError('Shader compile error:\n' + log)
         return shader
 
@@ -352,7 +414,9 @@ class Shader:
         GL.glAttachShader(prog, fs)
         GL.glLinkProgram(prog)
         if not GL.glGetProgramiv(prog, GL.GL_LINK_STATUS):
-            log = GL.glGetProgramInfoLog(prog).decode('utf-8')
+            log = GL.glGetProgramInfoLog(prog)
+            if isinstance(log, bytes):
+                log = log.decode('utf-8')
             raise RuntimeError('Program link error:\n' + log)
         return prog
 

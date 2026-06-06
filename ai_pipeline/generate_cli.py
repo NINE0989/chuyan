@@ -48,6 +48,7 @@ def generate(
     provider: str = "openai",
     session_id: str = "default",
     audio_array: list[float] | None = None,
+    analysis_context: str = "",
 ) -> GenerateResult:
     # 构建 LLM + tools + agent
     llm = build_llm(provider)
@@ -65,14 +66,14 @@ def generate(
         f"用户需求: {req.prompt}\n"
         f"style_profile: {req.style_profile}\n"
         f"音频摘要: {audio_summary}\n"
-        "请分析需求，按需调用工具（summarize_audio / infer_shader_style / get_skill_template / "
-        "validate_glsl_keywords 等），最终输出一个 ```glsl fenced code block 并保存。"
+        + (f"分析上下文:\n{analysis_context}\n" if analysis_context else "")
+        + "音频分析已在上一阶段完成。请根据分析上下文生成 GLSL 着色器。"
     )
 
     # 运行 Agent
     result = agent.invoke(
         {"messages": [HumanMessage(content=user_content)]},
-        config={"recursion_limit": 20},
+        config={"recursion_limit": 50},
     )
 
     # 从 agent 最终消息提取 GLSL

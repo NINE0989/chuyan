@@ -1,4 +1,4 @@
-#version 330 core
+#version 330
 precision mediump float;
 uniform float u_time;
 uniform vec2 u_resolution;

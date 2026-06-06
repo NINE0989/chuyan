@@ -1,4 +1,4 @@
-"""AI 管线工具集：18 个 @tool 函数，分 6 类。
+"""AI 管线工具集：18 个 @tool 函数 + 2 个编译检查工具，分 7 类。
 
 通过 get_all_tools() 获取全部 tool，供 LangGraph Agent 绑定使用。
 """
@@ -7,6 +7,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from .audio_tools import find_music_by_name, list_music_files, load_audio_from_file, summarize_audio
+from .compile_check import compile_check_glsl, compile_check_glsl_file
 from .session_tools import load_conversation, save_conversation
 from .shader_tools import ensure_glsl_version, extract_glsl_code, inject_shader_header, save_shader_to_file
 from .skill_tools import build_skill_prompt, get_skill_template, list_available_skills
@@ -15,7 +16,7 @@ from .validation_tools import load_known_badcases, run_full_quality_check, valid
 
 
 def get_all_tools() -> list:
-    """返回全部 18 个 @tool 函数列表，供 Agent 绑定。"""
+    """返回全部 20 个 @tool 函数列表，供 Agent 绑定。"""
     return [
         # 音频类 (4)
         summarize_audio,
@@ -31,6 +32,9 @@ def get_all_tools() -> list:
         validate_glsl_keywords,
         run_full_quality_check,
         load_known_badcases,
+        # 编译检查类 (2)
+        compile_check_glsl,
+        compile_check_glsl_file,
         # 技能类 (3)
         get_skill_template,
         list_available_skills,
@@ -59,6 +63,8 @@ __all__ = [
     "validate_glsl_keywords",
     "run_full_quality_check",
     "load_known_badcases",
+    "compile_check_glsl",
+    "compile_check_glsl_file",
     "get_skill_template",
     "list_available_skills",
     "build_skill_prompt",

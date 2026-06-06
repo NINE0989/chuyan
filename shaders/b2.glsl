@@ -1,7 +1,7 @@
 // TaiChi - by CC - 2020
 // License Creative Commons Attribution-NonCommercial-ShareAlike 3.0 Unported License.
 
-#version 330 core
+#version 330
 
 #ifdef GL_ES
 precision mediump float;

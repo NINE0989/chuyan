@@ -33,8 +33,15 @@ def _build_agent_node(llm: Any, system_prompt: str):
 
 
 def _should_continue(state: AgentState) -> str:
-    """条件路由：最后一条消息是否包含 tool_calls。"""
-    last_message = state["messages"][-1]
+    """条件路由：最后一条消息是否包含 tool_calls。
+
+    增加防护：最多 8 轮 tool 调用后强制结束。
+    """
+    messages = state["messages"]
+    last_message = messages[-1]
+    tool_rounds = sum(1 for m in messages if isinstance(m, AIMessage) and m.tool_calls)
+    if tool_rounds >= 8:
+        return END
     if isinstance(last_message, AIMessage) and last_message.tool_calls:
         return "tools"
     return END

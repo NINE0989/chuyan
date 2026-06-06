@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -27,9 +28,8 @@ def run():
 
     try:
         print("[MusicShader] 等待中...")
-        # 保持主线程存活
-        threading_event = __import__("threading").Event()
-        threading_event.wait()
+        while True:
+            time.sleep(1)
     except KeyboardInterrupt:
         print("\n[MusicShader] 退出...")
     finally:

@@ -1,4 +1,4 @@
-"""统一 API handler：chat / shaders / launch / settings。"""
+"""统一 API handler：chat / shaders / launch / speech / settings。"""
 from __future__ import annotations
 
 import json
@@ -17,7 +17,18 @@ class APIHandler(BaseHTTPRequestHandler):
 
     _settings: Settings | None = None
     _ai_service: AIService | None = None
+    _speech_service = None  # 延迟初始化
+    _speech_lock = threading.Lock()
     _lock = threading.Lock()
+
+    @staticmethod
+    def _get_speech():
+        if APIHandler._speech_service is None:
+            with APIHandler._speech_lock:
+                if APIHandler._speech_service is None:
+                    from WebEngine.speech_service import SpeechService
+                    APIHandler._speech_service = SpeechService()
+        return APIHandler._speech_service
 
     @property
     def settings(self) -> Settings:
@@ -84,6 +95,8 @@ class APIHandler(BaseHTTPRequestHandler):
             self._handle_get_shader(params.get("path", ""))
         elif path == "/api/music":
             self._handle_list_music(params.get("path", ""))
+        elif path == "/api/speech/status":
+            self._handle_speech_status()
         else:
             self.send_error(404)
 
@@ -93,12 +106,22 @@ class APIHandler(BaseHTTPRequestHandler):
 
         if path == "/api/chat":
             self._handle_chat(body)
+        elif path == "/api/chat/analyze":
+            self._handle_chat_analyze(body)
+        elif path == "/api/chat/build":
+            self._handle_chat_build(body)
+        elif path == "/api/chat/stream":
+            self._handle_chat_stream(body)
         elif path == "/api/settings":
             self._handle_save_settings(body)
         elif path == "/api/shader":
             self._handle_save_shader(body)
         elif path == "/api/launch":
             self._handle_launch(body)
+        elif path == "/api/speech/start":
+            self._handle_speech_start()
+        elif path == "/api/speech/stop":
+            self._handle_speech_stop(body)
         else:
             self.send_error(404)
 
@@ -113,15 +136,173 @@ class APIHandler(BaseHTTPRequestHandler):
     def _handle_chat(self, body: dict):
         prompt = body.get("prompt", "").strip()
         adjust = body.get("adjust", False)
+        mode = body.get("mode", "plan")
         if not prompt:
             self._send_json({"success": False, "error": "空 prompt"}, 400)
             return
 
+        if mode == "build":
+            self._send_json({"success": False, "error": "Build 模式已升级为两阶段。请先 POST /api/chat/analyze 进行分析，确认后再 POST /api/chat/build 生成代码。"})
+            return
+
         try:
-            code = self.ai.generate(prompt, adjust=adjust)
-            self._send_json({"success": True, "code": code})
+            code = self.ai.generate(prompt, adjust=adjust, mode=mode)
+            is_shader = "#version" in code or "void main" in code
+            self._send_json({"success": True, "code": code, "type": "shader" if is_shader else "chat"})
         except Exception as e:
             self._send_json({"success": False, "error": str(e)}, 500)
+
+    def _sse_stream(self, text: str, rtype: str):
+        """SSE 流式发送文本（模拟逐字输出效果）。"""
+        import time as _time
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("X-Accel-Buffering", "no")
+        self.end_headers()
+        # 禁用 Nagle 算法，确保小块数据立即发送
+        if hasattr(self.connection, "socket"):
+            self.connection.socket.setsockopt(6, 1, 1)  # TCP_NODELAY
+        try:
+            chunk_size = max(2, len(text) // 60) if len(text) > 60 else 1
+            for i in range(0, len(text), chunk_size):
+                chunk = text[i:i + chunk_size]
+                data = json.dumps({"chunk": chunk, "type": rtype}, ensure_ascii=False)
+                self.wfile.write(f"data: {data}\n\n".encode("utf-8"))
+                self.wfile.flush()
+                _time.sleep(0.04)
+            self.wfile.write("data: [DONE]\n\n".encode("utf-8"))
+            self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError, OSError):
+            pass
+
+    def _handle_chat_analyze(self, body: dict):
+        """Analyze 端点：需求分析（先发心跳，再阻塞调用，最后流式输出）。"""
+        prompt = body.get("prompt", "").strip()
+        if not prompt:
+            self._send_json({"success": False, "error": "空 prompt"}, 400)
+            return
+
+        import time as _time
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("X-Accel-Buffering", "no")
+        self.end_headers()
+        if hasattr(self.connection, "socket"):
+            try: self.connection.socket.setsockopt(6, 1, 1)
+            except Exception: pass
+
+        # 立即发送心跳，让前端开始渲染
+        self.wfile.write(b"data: {\"chunk\":\".\",\"type\":\"chat\"}\n\n")
+        self.wfile.flush()
+
+        # 阻塞调用 Agent
+        analysis = ""
+        try:
+            analysis = self.ai.analyze(prompt)
+        except Exception:
+            analysis = "分析失败，请重试。"
+
+        # 流式输出分析结果
+        chunk_size = max(2, len(analysis) // 50) if len(analysis) > 50 else 1
+        for i in range(0, len(analysis), chunk_size):
+            chunk = analysis[i:i + chunk_size]
+            data = json.dumps({"chunk": chunk, "type": "chat"}, ensure_ascii=False)
+            try:
+                self.wfile.write(f"data: {data}\n\n".encode("utf-8"))
+                self.wfile.flush()
+                _time.sleep(0.05)
+            except (BrokenPipeError, ConnectionResetError, OSError):
+                return
+        try:
+            self.wfile.write(b"data: [DONE]\n\n")
+            self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError, OSError):
+            pass
+
+    def _handle_chat_build(self, body: dict):
+        """Build 端点：生成 GLSL（先发心跳，再阻塞调用，最后流式输出）。"""
+        prompt = body.get("prompt", "").strip()
+        analysis_context = body.get("analysis_context", "")
+        if not prompt:
+            self._send_json({"success": False, "error": "空 prompt"}, 400)
+            return
+
+        import time as _time
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("X-Accel-Buffering", "no")
+        self.end_headers()
+        if hasattr(self.connection, "socket"):
+            try: self.connection.socket.setsockopt(6, 1, 1)
+            except Exception: pass
+
+        self.wfile.write(b"data: {\"chunk\":\".\",\"type\":\"chat\"}\n\n")
+        self.wfile.flush()
+
+        code = ""
+        try:
+            code = self.ai._build_shader(prompt, adjust=False, analysis_context=analysis_context)
+        except Exception:
+            code = "生成失败，请重试。"
+
+        is_shader = "#version" in code or "void main" in code
+        rtype = "shader" if is_shader else "chat"
+        chunk_size = max(1, len(code) // 50) if len(code) > 50 else 1
+        for i in range(0, len(code), chunk_size):
+            chunk = code[i:i + chunk_size]
+            data = json.dumps({"chunk": chunk, "type": rtype}, ensure_ascii=False)
+            try:
+                self.wfile.write(f"data: {data}\n\n".encode("utf-8"))
+                self.wfile.flush()
+                _time.sleep(0.05)
+            except (BrokenPipeError, ConnectionResetError, OSError):
+                return
+        try:
+            self.wfile.write(b"data: [DONE]\n\n")
+            self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError, OSError):
+            pass
+
+    def _handle_chat_stream(self, body: dict):
+        """SSE 流式对话端点。"""
+        prompt = body.get("prompt", "").strip()
+        adjust = body.get("adjust", False)
+        mode = body.get("mode", "plan")
+        if not prompt:
+            self._send_json({"success": False, "error": "空 prompt"}, 400)
+            return
+
+        import time as _time
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+
+        try:
+            full = self.ai.generate(prompt, adjust=adjust, mode=mode)
+            is_shader = "#version" in full or "void main" in full
+            rtype = "shader" if is_shader else "chat"
+            # 按字符块流式发送
+            chunk_size = max(1, len(full) // 30) if len(full) > 30 else len(full)
+            for i in range(0, len(full), chunk_size):
+                chunk = full[i:i + chunk_size]
+                data = json.dumps({"chunk": chunk, "type": rtype}, ensure_ascii=False)
+                self.wfile.write(f"data: {data}\n\n".encode("utf-8"))
+                self.wfile.flush()
+                _time.sleep(0.02)
+            self.wfile.write("data: [DONE]\n\n".encode("utf-8"))
+            self.wfile.flush()
+        except Exception as e:
+            data = json.dumps({"error": str(e)}, ensure_ascii=False)
+            self.wfile.write(f"data: {data}\n\n".encode("utf-8"))
+            self.wfile.flush()
 
     # ---- Shaders ----
     def _handle_list_shaders(self):
@@ -187,7 +368,7 @@ class APIHandler(BaseHTTPRequestHandler):
     # ---- Music Library ----
     def _music_dir(self):
         root = Path(__file__).resolve().parent.parent
-        d = root / "music"
+        d = root / "MusicLib"
         d.mkdir(parents=True, exist_ok=True)
         return d
 
@@ -259,3 +440,36 @@ class APIHandler(BaseHTTPRequestHandler):
 
     def log_message(self, format, *args):
         pass  # 静默
+
+    # ---- Speech ----
+    def _handle_speech_start(self):
+        try:
+            speech = self._get_speech()
+            speech.start_recording()
+            self._send_json({"ok": True, "recording": True})
+        except Exception as e:
+            self._send_json({"ok": False, "error": str(e)}, 500)
+
+    def _handle_speech_stop(self, body: dict):
+        try:
+            speech = self._get_speech()
+            language = body.get("language", "zh")
+            wav = speech.stop_recording()
+            if not wav:
+                self._send_json({"ok": False, "error": "无录音数据"}, 400)
+                return
+            result = speech.transcribe(wav, language=language)
+            self._send_json({
+                "ok": result.success,
+                "text": result.text,
+                "error": result.error,
+            })
+        except Exception as e:
+            self._send_json({"ok": False, "error": str(e)}, 500)
+
+    def _handle_speech_status(self):
+        try:
+            speech = self._get_speech()
+            self._send_json({"recording": speech.is_recording, "api_available": speech.api_available})
+        except Exception as e:
+            self._send_json({"recording": False, "api_available": False, "error": str(e)})

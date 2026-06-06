@@ -39,7 +39,7 @@ def _mock_chat(messages: list[dict], **kwargs: Any) -> AIMessage:
 
     return AIMessage(content="""
 ```glsl
-#version 330 core
+#version 330
 uniform vec3 iResolution;
 uniform float iTime;
 uniform sampler2D iChannel0;
@@ -86,7 +86,7 @@ def _mock_tool_calling(messages: list[dict], **kwargs: Any) -> AIMessage:
     ):
         return AIMessage(content="""
 ```glsl
-#version 330 core
+#version 330
 uniform vec3 iResolution;
 uniform float iTime;
 uniform sampler2D iChannel0;

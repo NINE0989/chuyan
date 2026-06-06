@@ -1,6 +1,6 @@
 // gesture_focus.glsl
 // 最小可用示例：读取 iHandPos 和 iHandAction
-#version 330 core
+#version 330
 
 #ifdef GL_ES
 precision mediump float;

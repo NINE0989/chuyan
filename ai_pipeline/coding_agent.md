@@ -13,7 +13,7 @@
 ## 执行流程（SOP）
 1. 先校验音频理解 JSON：必须存在 `band_mapping`、`visual_directions`、`shader_plan`。
 2. 再生成 Shader 框架：
-   - `#version 330 core`
+   - `#version 330`
    - `uniform vec3 iResolution;`
    - `uniform float iTime;`
    - `uniform sampler2D iChannel0;`

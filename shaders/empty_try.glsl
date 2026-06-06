@@ -1,5 +1,5 @@
 // Desktop-compatible fragment shader wrapper
-#version 330 core
+#version 330
 
 #ifdef GL_ES
 precision mediump float;

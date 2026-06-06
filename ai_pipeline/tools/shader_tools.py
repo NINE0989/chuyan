@@ -9,9 +9,9 @@ from langchain_core.tools import tool
 
 @tool
 def extract_glsl_code(text: str = "") -> str:
-    """从文本中提取 GLSL fenced code block（```glsl ... ```）。
+    """从文本中提取 GLSL 代码。
 
-    如果没有 markdown 代码块，返回原文本（去首尾空白）。
+    优先提取 ```glsl 代码块；若无，则找到 #version 行开始截取到文本末尾。
 
     Args:
         text: 可能包含 GLSL 代码块的文本
@@ -22,7 +22,13 @@ def extract_glsl_code(text: str = "") -> str:
     if not text:
         return ""
     m = re.search(r"(?is)```\s*(?:glsl)?\s*\n?(.*?)\n?```", text)
-    return m.group(1).strip() if m else text.strip()
+    if m:
+        return m.group(1).strip()
+    # 无 fence：找到 #version 行截取
+    vm = re.search(r"(^|\n)(#version\s+\d+.*)", text)
+    if vm:
+        return text[vm.start(2):].strip()
+    return text.strip()
 
 
 @tool
@@ -69,7 +75,7 @@ def inject_shader_header(code: str = "", style: str = "minimal") -> str:
 def ensure_glsl_version(code: str = "") -> str:
     """确保 GLSL 代码以 #version 指令开头。
 
-    如果代码不以 #version 开头，自动添加 `#version 330 core`。
+    如果代码不以 #version 开头，自动添加 `#version 330`。
 
     Args:
         code: GLSL 源码
@@ -78,8 +84,8 @@ def ensure_glsl_version(code: str = "") -> str:
         带版本指令的 GLSL 代码
     """
     if not code.strip():
-        return "#version 330 core\n"
+        return "#version 330\n"
     stripped = code.lstrip()
     if stripped.startswith("#version"):
         return code
-    return "#version 330 core\n" + code
+    return "#version 330\n" + code

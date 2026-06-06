@@ -58,7 +58,7 @@ class AudioSource:
             wasapi_info = pa.get_host_api_info_by_type(pyaudio.paWASAPI)
         except OSError:
             logger.error("WASAPI host API not found; is PyAudioWPatch installed and running on Windows?")
-            exit()
+            raise RuntimeError("WASAPI not available — 请安装 PyAudioWPatch")
         
         # Get default WASAPI speakers
         default_speakers = pa.get_device_info_by_index(wasapi_info["defaultOutputDevice"])
@@ -74,7 +74,7 @@ class AudioSource:
                     break
             else:
                 logger.warning("No loopback device found; using default input device instead.")
-                exit()
+                raise RuntimeError("No loopback device found")
         
         self._stream = pa.open(format=pyaudio.paInt16,
                 channels=default_speakers["maxInputChannels"],
@@ -98,12 +98,20 @@ class AudioSource:
 
     def stop_capture(self):
         self._running = False
+        # 先停流，让阻塞在 read() 的 _reader 线程能检查到 _running 标志
+        if self._stream is not None:
+            try:
+                self._stream.stop_stream()
+            except Exception:
+                pass
         if self._thread is not None:
-            self._thread.join()
+            self._thread.join(timeout=2.0)
             self._thread = None
         if self._stream is not None:
-            self._stream.stop_stream()
-            self._stream.close()
+            try:
+                self._stream.close()
+            except Exception:
+                pass
             self._stream = None
 
     def _reader(self):

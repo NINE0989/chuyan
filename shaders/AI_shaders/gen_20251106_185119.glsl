@@ -1,4 +1,4 @@
-#version 330 core
+#version 330
 // Simple audio-responsive particle system with color shifts and glow
 // Compatibility boilerplate
 #ifdef GL_ES

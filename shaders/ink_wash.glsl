@@ -5,7 +5,7 @@ Based on Led Spectrum Analyser by: simesgreen - 27th February, 2013 https://www.
 Creative Commons Attribution-NonCommercial-ShareAlike 3.0 Unported License.
 */
 
-# version 330 core
+#version 330
 #include "ShaderCommon.glsl"
 
 void mainImage( out vec4 fragColor, in vec2 fragCoord )

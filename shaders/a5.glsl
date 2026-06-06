@@ -1,5 +1,5 @@
-// Target: desktop (#version 330 core)
-#version 330 core
+// Target: desktop (#version 330)
+#version 330
 
 #ifdef GL_ES
 precision mediump float;

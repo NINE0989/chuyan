@@ -17,7 +17,7 @@ def _ensure_version(code: str) -> str:
     code = code.lstrip('\ufeff')  # BOM
     if code.lstrip().startswith('#version'):
         return code
-    return '#version 330 core\n' + code
+    return '#version 330\n' + code
 
 
 def run_shader_viewer(shader_path: str, width: int = 1280, height: int = 360, monitor_index: int | None = None):

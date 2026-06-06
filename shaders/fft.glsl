@@ -1,7 +1,7 @@
 // ECG-style waveform visualization using time-domain audio in iChannel0
 // Expects iChannel0 to be a 1xN texture where R channel holds time-domain samples (-1..1)
 
-#version 330 core
+#version 330
 
 #ifdef GL_ES
 precision mediump float;

@@ -1,7 +1,7 @@
 // White-on-black variant of empty_try.glsl
 // Background is black; subject (flame/visual) is rendered in white (intensity only).
 
-#version 330 core
+#version 330
 
 #ifdef GL_ES
 precision mediump float;

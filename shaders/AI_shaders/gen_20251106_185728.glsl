@@ -1,4 +1,4 @@
-#version 330 core
+#version 330
 // Simple audio-reactive particle shader with circular mask and RGB shift
 // Compatibility boilerplate
 #ifdef GL_ES
