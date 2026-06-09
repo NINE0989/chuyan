@@ -8,11 +8,7 @@ precision mediump float;
 #endif
 
 #ifndef TEX
-#ifdef GL_ES
-#define TEX(s, uv) texture2D(s, uv)
-#else
 #define TEX(s, uv) texture(s, uv)
-#endif
 #endif
 
 uniform vec3 iResolution;
@@ -39,13 +35,13 @@ void mainImage(out vec4 outColor, in vec2 fragCoord) {
     // X sample coordinate into time-domain texture
     float sx = uv.x;
     // sample from iChannel0 (assumed 1-row texture)
-    float sample = TEX(iChannel0, vec2(sx, 0.5)).r; // raw -1..1
+    float sp = TEX(iChannel0, vec2(sx, 0.5)).r; // raw -1..1
 
     // make several harmonics/echoes for a fuller trace
     float echo = 0.0;
     echo += TEX(iChannel0, vec2(mod(sx - 0.0005 * sin(iTime*2.0), 1.0), 0.5)).r * 0.6;
     echo += TEX(iChannel0, vec2(mod(sx - 0.0012 * sin(iTime*1.3), 1.0), 0.5)).r * 0.3;
-    sample = mix(sample, echo, 0.35);
+    sp = mix(sp, echo, 0.35);
 
     // Draw each row's waveform
     for (int i = 0; i < 8; i++) {
@@ -59,7 +55,7 @@ void mainImage(out vec4 outColor, in vec2 fragCoord) {
     // map sample (-1..1) to vertical offset within the row
     // increase amplitude so the waveform nearly reaches the top but doesn't exceed it
     float amplitudeScale = 0.62; // tuned so peak approaches top without overflowing
-    float ypos = centerY + sample * amplitudeScale * rowH * rowGain;
+    float ypos = centerY + sp * amplitudeScale * rowH * rowGain;
     // clamp to avoid drawing beyond the viewport top
     ypos = clamp(ypos, 0.0, 0.98);
 

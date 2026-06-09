@@ -4,6 +4,8 @@ from __future__ import annotations
 import argparse
 import ast
 import re
+import os
+import sys
 from pathlib import Path
 
 
@@ -72,4 +74,11 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        rc = main()
+    except Exception as e:
+        print(f"[ai-hooks] 质量检查异常: {e}")
+        import traceback
+        traceback.print_exc()
+        rc = 1
+    os._exit(rc)

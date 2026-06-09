@@ -167,7 +167,7 @@ main{flex:1;display:flex;overflow:hidden}
     <div id="chat-input-row" style="position:relative">
       <div id="slash-dropdown"></div>
       <button id="mic-btn" onclick="toggleRecording()" title="语音输入">🎤</button>
-      <textarea id="chat-input" rows="1" placeholder="描述视觉需求... Enter 发送, Shift+Enter 换行"></textarea>
+      <textarea id="chat-input" rows="1" placeholder="描述视觉需求..."></textarea>
       <button id="send-btn" onclick="sendMessage()">发送</button>
     </div>
   </div>
@@ -176,7 +176,7 @@ main{flex:1;display:flex;overflow:hidden}
   <div id="center-panel">
     <div id="code-section">
       <div id="editor-header"><span><span class="dot"></span>GLSL 代码编辑器</span><span id="editor-status" style="color:var(--accent2)"></span></div>
-      <textarea id="code-editor" placeholder="// GLSL 代码将在 AI 生成后显示在这里&#10;// 也可以直接粘贴 GLSL 代码编辑" spellcheck="false"></textarea>
+      <textarea id="code-editor" placeholder="GLSL 代码将在 AI 生成后显示在这里&#10;也可以直接粘贴 GLSL 代码编辑" spellcheck="false"></textarea>
       <div id="editor-actions">
         <button class="btn-apply" onclick="applyShader()">▶ 应用</button>
         <button class="btn-save" onclick="saveShader()">💾 保存</button>
@@ -569,6 +569,7 @@ function compileFragment(src) {
   if (!gl) return null;
   let code = src;
   code = code.replace(/#ifdef\s+GL_ES\b[^\n]*\n([\s\S]*?)#endif/g, (_,body) => body);
+  code = code.replace(/#ifndef\s+GL_ES\b[^\n]*\n([\s\S]*?)#endif/g, (_,body) => body);
   let lines = code.split('\n');
   while (lines.length > 0) {
     let t = lines[0].trim();

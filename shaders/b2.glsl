@@ -10,6 +10,15 @@ precision mediump float;
 uniform vec3 iResolution;
 uniform float iTime;
 out vec4 fragColor;
+
+#ifdef GL_ES
+#define OUTPUT_COLOR(v) gl_FragColor = v
+#endif
+
+#ifndef GL_ES
+#define OUTPUT_COLOR(v) fragColor = v
+#endif
+
 // -------- Const parameter -------- //
 const float PI = 3.1415926;
 
@@ -93,9 +102,5 @@ void main()
 {
     vec4 outCol = vec4(0.0);
     mainImage(outCol, gl_FragCoord.xy);
-#ifdef GL_ES
-    gl_FragColor = outCol;
-#else
-    fragColor = outCol;
-#endif
+    OUTPUT_COLOR(outCol);
 }

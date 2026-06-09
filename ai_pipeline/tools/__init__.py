@@ -50,8 +50,37 @@ def get_all_tools() -> list:
     ]
 
 
+def get_build_tools() -> list:
+    """返回生成阶段专用 tool 列表（排除音频/音乐和分析辅助工具）。"""
+    return [
+        # Shader 编写类 (4)
+        extract_glsl_code,
+        save_shader_to_file,
+        inject_shader_header,
+        ensure_glsl_version,
+        # 验证类 (3)
+        validate_glsl_keywords,
+        run_full_quality_check,
+        load_known_badcases,
+        # 编译检查类 (2)
+        compile_check_glsl,
+        compile_check_glsl_file,
+        # 技能类 (3)
+        get_skill_template,
+        list_available_skills,
+        build_skill_prompt,
+        # 会话类 (2)
+        load_conversation,
+        save_conversation,
+        # 辅助类 (2)
+        infer_shader_style,
+        load_audio_array,
+    ]
+
+
 __all__ = [
     "get_all_tools",
+    "get_build_tools",
     "summarize_audio",
     "load_audio_from_file",
     "list_music_files",

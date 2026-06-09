@@ -5,15 +5,23 @@
 precision mediump float;
 #endif
 #ifndef TEX
-#ifdef GL_ES
-#define TEX(s, uv) texture2D(s, uv)
-#else
 #define TEX(s, uv) texture(s, uv)
 #endif
+
+#ifdef GL_ES
+#define OUTPUT_COLOR(v) gl_FragColor = v
 #endif
+
+#ifndef GL_ES
+#define OUTPUT_COLOR(v) fragColor = v
+#endif
+
 uniform vec3 iResolution;
 uniform float iTime;
 uniform sampler2D iChannel0;
+#ifndef GL_ES
+out vec4 fragColor;
+#endif
 
 #define MAX_PARTICLES 128
 #define PARTICLE_ITERATIONS 32
@@ -128,12 +136,7 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
 }
 
 void main() {
-    #ifdef GL_ES
-    vec4 fragColor;
-    mainImage(fragColor, gl_FragCoord.xy);
-    gl_FragColor = fragColor;
-    #else
-    out vec4 fragColor;
-    mainImage(fragColor, gl_FragCoord.xy);
-    #endif
+    vec4 color = vec4(0.0);
+    mainImage(color, gl_FragCoord.xy);
+    OUTPUT_COLOR(color);
 }

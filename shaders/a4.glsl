@@ -26,11 +26,15 @@ const float Semitone  = 1.05946309436; //12 notes between an octave, octave is 2
 
 // TEX macro for portability
 #ifndef TEX
-#ifdef GL_ES
-#define TEX(s, uv) texture2D(s, uv)
-#else
 #define TEX(s, uv) texture(s, uv)
 #endif
+
+#ifdef GL_ES
+#define OUTPUT_COLOR(v) gl_FragColor = v
+#endif
+
+#ifndef GL_ES
+#define OUTPUT_COLOR(v) fragColor = v
 #endif
 
 uniform vec3 iResolution;
@@ -101,7 +105,8 @@ void mainImage( out vec4 fragColor_out, in vec2 fragCoord ){
         vec2 Scaled     = fragCoord.xy/iResolution.xy;
     #ifdef RIVER_BACKGROUND
     Color = TEX(iChannel1,Scaled.xy).rgb;
-    #else
+    #endif
+    #ifndef RIVER_BACKGROUND
     // Use pure black background when RIVER_BACKGROUND is not defined
     Color = vec3(0.0);
     #endif
@@ -183,7 +188,8 @@ void mainImage( out vec4 fragColor_out, in vec2 fragCoord ){
             } else {
                 #ifdef FFT_CONTRAST_VIEW
                 Color = max(Color,0.5*color2);
-                #else
+                #endif
+                #ifndef FFT_CONTRAST_VIEW
                 Color = max(Color,color2);
                 #endif
             }
@@ -195,9 +201,5 @@ void mainImage( out vec4 fragColor_out, in vec2 fragCoord ){
 void main(){
     vec4 color = vec4(0.0);
     mainImage(color, gl_FragCoord.xy);
-#ifdef GL_ES
-    gl_FragColor = color;
-#else
-    fragColor = color;
-#endif
+    OUTPUT_COLOR(color);
 }

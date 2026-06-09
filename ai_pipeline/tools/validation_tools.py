@@ -63,7 +63,7 @@ def run_full_quality_check(glsl_code: str = "") -> str:
         "--root", str(root),
         "--target-glsl", str(temp_path),
     ]
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=30, cwd=root)
 
     return json.dumps(
         {"returncode": result.returncode, "stdout": result.stdout.strip(), "stderr": result.stderr.strip()},

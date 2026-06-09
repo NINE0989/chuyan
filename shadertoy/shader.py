@@ -179,6 +179,19 @@ class ShaderViewer:
                     fs_src = fs_src[:eol + 1] + 'precision mediump float;\n' + fs_src[eol + 1:]
             print(f"[GL] ES 兼容模式: 顶点/片段着色器已适配为 #version 300 es")
 
+            # 适配着色器中的 GL_ES 条件编译逻辑：
+            # 在 ES 300 中 gl_FragColor 不存在，但 shader 是面向 desktop #version 330 编写的，
+            # #ifdef GL_ES 分支使用 gl_FragColor 会导致编译错误。
+            # 因此将输出宏和 fragColor 声明从 #ifndef GL_ES 分支提升到全局。
+            fs_src = fs_src.replace(
+                '#ifdef GL_ES\n#define OUTPUT_COLOR(v) gl_FragColor = v\n#endif\n\n#ifndef GL_ES\n#define OUTPUT_COLOR(v) fragColor = v\n#endif',
+                '#define OUTPUT_COLOR(v) fragColor = v'
+            )
+            fs_src = fs_src.replace(
+                '\n#ifndef GL_ES\nout vec4 fragColor;\n#endif',
+                '\nout vec4 fragColor;'
+            )
+
         # Compile shaders
         vs = self._compile_shader(self.VERTEX_SRC, GL.GL_VERTEX_SHADER)
         fs = self._compile_shader(fs_src, GL.GL_FRAGMENT_SHADER)
@@ -377,6 +390,19 @@ class Shader:
                     eol = fs_src.find('\n', idx)
                     fs_src = fs_src[:eol + 1] + 'precision mediump float;\n' + fs_src[eol + 1:]
             print(f"[GL] ES 兼容模式: 顶点/片段着色器已适配为 #version 300 es")
+
+            # 适配着色器中的 GL_ES 条件编译逻辑：
+            # 在 ES 300 中 gl_FragColor 不存在，但 shader 是面向 desktop #version 330 编写的，
+            # #ifdef GL_ES 分支使用 gl_FragColor 会导致编译错误。
+            # 因此将输出宏和 fragColor 声明从 #ifndef GL_ES 分支提升到全局。
+            fs_src = fs_src.replace(
+                '#ifdef GL_ES\n#define OUTPUT_COLOR(v) gl_FragColor = v\n#endif\n\n#ifndef GL_ES\n#define OUTPUT_COLOR(v) fragColor = v\n#endif',
+                '#define OUTPUT_COLOR(v) fragColor = v'
+            )
+            fs_src = fs_src.replace(
+                '\n#ifndef GL_ES\nout vec4 fragColor;\n#endif',
+                '\nout vec4 fragColor;'
+            )
 
         # Compile shaders
         vs = self._compile_shader(self.VERTEX_SRC, GL.GL_VERTEX_SHADER)

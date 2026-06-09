@@ -11,6 +11,14 @@ precision mediump float;
 #define TEX(s, uv) texture(s, uv)
 #endif
 
+#ifdef GL_ES
+#define OUTPUT_COLOR(v) gl_FragColor = v
+#endif
+
+#ifndef GL_ES
+#define OUTPUT_COLOR(v) fragColor = v
+#endif
+
 uniform vec3 iResolution;
 uniform float iTime;
 uniform sampler2D iChannel0;
@@ -56,10 +64,10 @@ void mainImage( out vec4 outColor, in vec2 fragCoord )
     vec3 base_color  = vec3(1.0, 1.0, 1.0) - f * spline;
     vec3 flame_color = pow(base_color, vec3(3.0));
 
-    float tt = 0.3 - uv.y;
+    float tt = 0.4 - uv.y;
     float df = sign(tt);
     df = (df + 1.0) / 0.5;
-    vec3 col = flame_color * vec3(1.0 - step(fft, abs(0.3 - uv.y))) * vec3(fVFreq);
+    vec3 col = flame_color * vec3(1.0 - step(fft, abs(0.4 - uv.y))) * vec3(fVFreq);
     col -= col * df * 0.180;
 
     // Convert color visualization to white intensity on black
@@ -74,9 +82,5 @@ void mainImage( out vec4 outColor, in vec2 fragCoord )
 void main() {
     vec4 color = vec4(0.0);
     mainImage(color, gl_FragCoord.xy);
-#ifdef GL_ES
-    gl_FragColor = color;
-#else
-    fragColor = color;
-#endif
+    OUTPUT_COLOR(color);
 }

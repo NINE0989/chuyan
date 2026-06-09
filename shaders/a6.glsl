@@ -8,11 +8,7 @@ precision mediump float;
 #endif
 
 #ifndef TEX
-#ifdef GL_ES
-#define TEX(s, uv) texture2D(s, uv)
-#else
 #define TEX(s, uv) texture(s, uv)
-#endif
 #endif
 
 uniform vec3 iResolution;

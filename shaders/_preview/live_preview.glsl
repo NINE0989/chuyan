@@ -231,7 +231,8 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord )
     col = vec3(1)*NetLayer(uv, 0., iTime);
     uv = fract(uv);
     //if(uv.x>.98 || uv.y>.98) col += 1.;
-    #else
+    #endif
+    #ifndef SIMPLE
     col *= 1.-dot(uv,uv);
     t = mod(iTime, 230.);
     col *= S(0., 20., t)*S(224., 200., t);

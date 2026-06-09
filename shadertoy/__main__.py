@@ -156,11 +156,11 @@ class ShaderToyApp:
         texdata_time[0, :, 0] = td  # R channel holds time-domain samples
 
         # Assign into uniform channels
-        # iChannel0 -> time-domain
-        self.uniforms.iChannels[0].data = texdata_time
+        # iChannel0 -> FFT spectrum (ShaderToy standard: iChannel0 = frequency data)
+        self.uniforms.iChannels[0].data = texdata_fft
         self.uniforms.iChannels[0].time = self.uniforms.iTime
-        # iChannel1 -> FFT
-        self.uniforms.iChannels[1].data = texdata_fft
+        # iChannel1 -> time-domain waveform
+        self.uniforms.iChannels[1].data = texdata_time
         self.uniforms.iChannels[1].time = self.uniforms.iTime
         # fill audio-related uniforms - only sample rate
         try:

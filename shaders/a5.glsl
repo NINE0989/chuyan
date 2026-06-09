@@ -6,11 +6,15 @@ precision mediump float;
 #endif
 
 #ifndef TEX
-#ifdef GL_ES
-#define TEX(s, uv) texture2D(s, uv)
-#else
 #define TEX(s, uv) texture(s, uv)
 #endif
+
+#ifdef GL_ES
+#define OUTPUT_COLOR(v) gl_FragColor = v
+#endif
+
+#ifndef GL_ES
+#define OUTPUT_COLOR(v) fragColor = v
 #endif
 
 uniform vec3 iResolution;
@@ -140,9 +144,5 @@ void mainImage( out vec4 outColor, in vec2 fragCoord )
 void main() {
     vec4 color;
     mainImage(color, gl_FragCoord.xy);
-#ifdef GL_ES
-    gl_FragColor = color;
-#else
-    fragColor = color;
-#endif
+    OUTPUT_COLOR(color);
 }

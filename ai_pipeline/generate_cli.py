@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -12,7 +13,7 @@ from langchain_core.messages import HumanMessage
 from ai_pipeline.agent import build_shader_agent
 from ai_pipeline.hooks.engine import GenerationHookEngine
 from ai_pipeline.llm.adapter import build_llm
-from ai_pipeline.tools import get_all_tools
+from ai_pipeline.tools import get_build_tools
 from ai_pipeline.tools.shader_tools import extract_glsl_code
 from ai_pipeline.types import GenerateRequest, GenerateResult
 
@@ -34,7 +35,7 @@ def run_quality(root: Path, target_glsl: Path) -> dict[str, str | int]:
         "--target-glsl",
         str(target_glsl),
     ]
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=30, cwd=root)
     return {
         "returncode": result.returncode,
         "stdout": result.stdout.strip() if result.stdout else "",
@@ -52,7 +53,7 @@ def generate(
 ) -> GenerateResult:
     # 构建 LLM + tools + agent
     llm = build_llm(provider)
-    tools = get_all_tools()
+    tools = get_build_tools()
     agent = build_shader_agent(llm, tools)
 
     # 构建用户消息
@@ -181,4 +182,11 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        rc = main()
+    except Exception as e:
+        print(f"[generate_cli] 异常: {e}")
+        import traceback
+        traceback.print_exc()
+        rc = 1
+    os._exit(rc)

@@ -5,16 +5,21 @@
 precision mediump float;
 #endif
 #ifndef TEX
-#ifdef GL_ES
-#define TEX(s, uv) texture2D(s, uv)
-#else
 #define TEX(s, uv) texture(s, uv)
 #endif
+
+#ifdef GL_ES
+#define OUTPUT_COLOR(v) gl_FragColor = v
+#endif
+
+#ifndef GL_ES
+#define OUTPUT_COLOR(v) fragColor = v
 #endif
 
 uniform vec3 iResolution;
 uniform float iTime;
 uniform sampler2D iChannel0;
+out vec4 fragColor;
 
 float hash12(vec2 p) {
     p = fract(p * vec2(114.233, 233.444));
@@ -112,12 +117,8 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     fragColor = vec4(col, 1.);
 }
 
-void main(){
-    #ifdef GL_ES
-    vec4 fragColor;
-    mainImage(fragColor, gl_FragCoord.xy);
-    gl_FragColor = fragColor;
-    #else
-    mainImage(fragColor, gl_FragCoord.xy);
-    #endif
+void main() {
+    vec4 color = vec4(0.0);
+    mainImage(color, gl_FragCoord.xy);
+    OUTPUT_COLOR(color);
 }
