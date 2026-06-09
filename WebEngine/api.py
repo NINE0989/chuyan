@@ -10,6 +10,7 @@ from pathlib import Path
 
 from WebEngine.settings import Settings
 from WebEngine.ai_service import AIService
+from ai_pipeline.tools.session_tools import list_conversations, delete_session, new_session, load_messages, pin_conversation, rename_session
 
 
 class APIHandler(BaseHTTPRequestHandler):
@@ -97,6 +98,8 @@ class APIHandler(BaseHTTPRequestHandler):
             self._handle_list_music(params.get("path", ""))
         elif path == "/api/speech/status":
             self._handle_speech_status()
+        elif path == "/api/conversations":
+            self._handle_list_conversations()
         else:
             self.send_error(404)
 
@@ -116,8 +119,22 @@ class APIHandler(BaseHTTPRequestHandler):
             self._handle_save_settings(body)
         elif path == "/api/shader":
             self._handle_save_shader(body)
+        elif path == "/api/shader/rename":
+            self._handle_rename_shader(body)
+        elif path == "/api/shader/delete":
+            self._handle_delete_shader(body)
         elif path == "/api/launch":
             self._handle_launch(body)
+        elif path == "/api/conversations/new":
+            self._handle_new_conversation()
+        elif path == "/api/conversations/delete":
+            self._handle_delete_conversation(body)
+        elif path == "/api/conversations/switch":
+            self._handle_switch_conversation(body)
+        elif path == "/api/conversations/pin":
+            self._handle_pin_conversation(body)
+        elif path == "/api/conversations/rename":
+            self._handle_rename_conversation(body)
         elif path == "/api/speech/start":
             self._handle_speech_start()
         elif path == "/api/speech/stop":
@@ -137,9 +154,17 @@ class APIHandler(BaseHTTPRequestHandler):
         prompt = body.get("prompt", "").strip()
         adjust = body.get("adjust", False)
         mode = body.get("mode", "plan")
+        session_id = body.get("session_id", "")
         if not prompt:
             self._send_json({"success": False, "error": "空 prompt"}, 400)
             return
+
+        if session_id and session_id != self.ai.session_id:
+            self.ai.switch_to(session_id)
+        elif not self.ai.session_id and mode != "build":
+            from ai_pipeline.tools.session_tools import new_session
+            new_id = new_session()
+            self.ai.switch_to(new_id)
 
         if mode == "build":
             self._send_json({"success": False, "error": "Build 模式已升级为两阶段。请先 POST /api/chat/analyze 进行分析，确认后再 POST /api/chat/build 生成代码。"})
@@ -164,6 +189,14 @@ class APIHandler(BaseHTTPRequestHandler):
         # 禁用 Nagle 算法，确保小块数据立即发送
         if hasattr(self.connection, "socket"):
             self.connection.socket.setsockopt(6, 1, 1)  # TCP_NODELAY
+        # 发送 session_id 元数据事件（仅当有 session_id 时）
+        sid = self.ai.session_id
+        if sid:
+            try:
+                self.wfile.write(f"data: {json.dumps({'session_id': sid})}\n\n".encode("utf-8"))
+                self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError, OSError):
+                pass
         try:
             chunk_size = max(2, len(text) // 60) if len(text) > 60 else 1
             for i in range(0, len(text), chunk_size):
@@ -180,9 +213,18 @@ class APIHandler(BaseHTTPRequestHandler):
     def _handle_chat_analyze(self, body: dict):
         """Analyze 端点：需求分析（先发心跳，再阻塞调用，最后流式输出）。"""
         prompt = body.get("prompt", "").strip()
+        session_id = body.get("session_id", "")
         if not prompt:
             self._send_json({"success": False, "error": "空 prompt"}, 400)
             return
+
+        # 切换/初始化会话
+        if session_id and session_id != self.ai.session_id:
+            self.ai.switch_to(session_id)
+        elif not self.ai.session_id:
+            from ai_pipeline.tools.session_tools import new_session
+            new_id = new_session()
+            self.ai.switch_to(new_id)
 
         import time as _time
         self.send_response(200)
@@ -195,11 +237,13 @@ class APIHandler(BaseHTTPRequestHandler):
             try: self.connection.socket.setsockopt(6, 1, 1)
             except Exception: pass
 
-        # 立即发送心跳，让前端开始渲染
+        # 发送 session_id 元数据事件 + 心跳
+        sid_event = json.dumps({"session_id": self.ai.session_id})
+        self.wfile.write(f"data: {sid_event}\n\n".encode("utf-8"))
         self.wfile.write(b"data: {\"chunk\":\".\",\"type\":\"chat\"}\n\n")
         self.wfile.flush()
 
-        # 阻塞调用 Agent
+        # 阻塞调用 Agent（analyze 内部已 auto-save）
         analysis = ""
         try:
             analysis = self.ai.analyze(prompt)
@@ -227,9 +271,17 @@ class APIHandler(BaseHTTPRequestHandler):
         """Build 端点：生成 GLSL（先发心跳，再阻塞调用，最后流式输出）。"""
         prompt = body.get("prompt", "").strip()
         analysis_context = body.get("analysis_context", "")
+        session_id = body.get("session_id", "")
         if not prompt:
             self._send_json({"success": False, "error": "空 prompt"}, 400)
             return
+
+        if session_id and session_id != self.ai.session_id:
+            self.ai.switch_to(session_id)
+        elif not self.ai.session_id:
+            from ai_pipeline.tools.session_tools import new_session
+            new_id = new_session()
+            self.ai.switch_to(new_id)
 
         import time as _time
         self.send_response(200)
@@ -242,6 +294,9 @@ class APIHandler(BaseHTTPRequestHandler):
             try: self.connection.socket.setsockopt(6, 1, 1)
             except Exception: pass
 
+        # 发送 session_id 元数据事件 + 心跳
+        sid_event = json.dumps({"session_id": self.ai.session_id})
+        self.wfile.write(f"data: {sid_event}\n\n".encode("utf-8"))
         self.wfile.write(b"data: {\"chunk\":\".\",\"type\":\"chat\"}\n\n")
         self.wfile.flush()
 
@@ -274,9 +329,17 @@ class APIHandler(BaseHTTPRequestHandler):
         prompt = body.get("prompt", "").strip()
         adjust = body.get("adjust", False)
         mode = body.get("mode", "plan")
+        session_id = body.get("session_id", "")
         if not prompt:
             self._send_json({"success": False, "error": "空 prompt"}, 400)
             return
+
+        if session_id and session_id != self.ai.session_id:
+            self.ai.switch_to(session_id)
+        elif not self.ai.session_id and mode != "build":
+            from ai_pipeline.tools.session_tools import new_session
+            new_id = new_session()
+            self.ai.switch_to(new_id)
 
         import time as _time
         self.send_response(200)
@@ -284,6 +347,14 @@ class APIHandler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-cache")
         self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
+
+        # 发送 session_id 元数据事件
+        sid_event = json.dumps({"session_id": self.ai.session_id})
+        try:
+            self.wfile.write(f"data: {sid_event}\n\n".encode("utf-8"))
+            self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError, OSError):
+            pass
 
         try:
             full = self.ai.generate(prompt, adjust=adjust, mode=mode)
@@ -303,6 +374,79 @@ class APIHandler(BaseHTTPRequestHandler):
             data = json.dumps({"error": str(e)}, ensure_ascii=False)
             self.wfile.write(f"data: {data}\n\n".encode("utf-8"))
             self.wfile.flush()
+
+    # ---- Conversations ----
+    def _handle_list_conversations(self):
+        """GET /api/conversations → 返回会话列表。"""
+        self._send_json(list_conversations())
+
+    def _handle_new_conversation(self):
+        """POST /api/conversations/new → 创建新会话并切换到它。"""
+        session_id = new_session()
+        self.ai.switch_to(session_id)
+        self._send_json({
+            "session_id": session_id,
+            "title": "新对话",
+            "messages": [],
+        })
+
+    def _handle_delete_conversation(self, body: dict):
+        """POST /api/conversations/delete → 删除指定会话。"""
+        session_id = body.get("session_id", "")
+        if not session_id:
+            self._send_json({"ok": False, "error": "缺少 session_id"}, 400)
+            return
+
+        is_current = session_id == self.ai.session_id
+        delete_session(session_id)
+
+        # 如果当前会话被删除，切换到第一个可用会话或创建新会话
+        if is_current:
+            convs = list_conversations()
+            if convs:
+                next_id = convs[0]["session_id"]
+                self.ai.switch_to(next_id)
+            else:
+                new_id = new_session()
+                self.ai.switch_to(new_id)
+
+        self._send_json({"ok": True})
+
+    def _handle_switch_conversation(self, body: dict):
+        """POST /api/conversations/switch → 切换到指定会话。"""
+        session_id = body.get("session_id", "")
+        if not session_id:
+            self._send_json({"error": "缺少 session_id"}, 400)
+            return
+
+        messages = self.ai.switch_to(session_id)
+        self._send_json({
+            "session_id": session_id,
+            "messages": messages,
+        })
+
+    def _handle_pin_conversation(self, body: dict):
+        """POST /api/conversations/pin → 置顶/取消置顶会话。"""
+        session_id = body.get("session_id", "")
+        pinned = body.get("pinned", True)
+        if not session_id:
+            self._send_json({"ok": False, "error": "缺少 session_id"}, 400)
+            return
+        ok = pin_conversation(session_id, bool(pinned))
+        self._send_json({"ok": ok})
+
+    def _handle_rename_conversation(self, body: dict):
+        """POST /api/conversations/rename → 重命名会话。"""
+        session_id = body.get("session_id", "")
+        new_title = body.get("title", "").strip()
+        if not session_id:
+            self._send_json({"ok": False, "error": "缺少 session_id"}, 400)
+            return
+        if not new_title:
+            self._send_json({"ok": False, "error": "标题不能为空"}, 400)
+            return
+        ok = rename_session(session_id, new_title)
+        self._send_json({"ok": ok})
 
     # ---- Shaders ----
     def _handle_list_shaders(self):
@@ -350,6 +494,40 @@ class APIHandler(BaseHTTPRequestHandler):
         fp = out_dir / f"{safe_name}.glsl"
         fp.write_text(code, encoding="utf-8")
         self._send_json({"ok": True, "path": str(fp.relative_to(root)).replace("\\", "/")})
+
+    def _handle_rename_shader(self, body: dict):
+        """POST /api/shader/rename → 重命名 shader 文件。"""
+        path = body.get("path", "")
+        new_name = body.get("name", "").strip()
+        if not path or not new_name:
+            self._send_json({"ok": False, "error": "缺少 path 或 name"}, 400)
+            return
+        root = Path(__file__).resolve().parent.parent
+        fp = root / path
+        if not fp.is_file():
+            self._send_json({"ok": False, "error": f"文件不存在: {path}"}, 404)
+            return
+        safe_name = "".join(c for c in new_name if c.isalnum() or c in "_-") or "shader"
+        new_fp = fp.parent / f"{safe_name}.glsl"
+        if new_fp.exists():
+            self._send_json({"ok": False, "error": "目标文件已存在"}, 409)
+            return
+        fp.rename(new_fp)
+        self._send_json({"ok": True})
+
+    def _handle_delete_shader(self, body: dict):
+        """POST /api/shader/delete → 删除 shader 文件。"""
+        path = body.get("path", "")
+        if not path:
+            self._send_json({"ok": False, "error": "缺少 path"}, 400)
+            return
+        root = Path(__file__).resolve().parent.parent
+        fp = root / path
+        if not fp.is_file():
+            self._send_json({"ok": False, "error": f"文件不存在: {path}"}, 404)
+            return
+        fp.unlink()
+        self._send_json({"ok": True})
 
     # ---- Launch ----
     def _handle_launch(self, body: dict):

@@ -16,7 +16,7 @@ from ai_pipeline.types import GenerateRequest
 class AIService:
     """兼容旧接口的 AI 服务封装。"""
 
-    def __init__(self, model: str = "", timeout: int = 120):
+    def __init__(self, model: str = "", timeout: int = 120, session_id: str = ""):
         self.model = model or os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
         self.timeout = timeout
         self.history: List[Dict[str, str]] = []
@@ -32,8 +32,8 @@ class AIService:
                 has_key = bool(os.getenv("OPENAI_API_KEY"))
             self.provider = "openai" if has_key else "mock"
 
-        self._session_seed = hashlib.md5(str(time.time()).encode("utf-8")).hexdigest()[:10]
-        self.session_id = f"web_{self._session_seed}"
+        self.session_id = session_id or ""
+        self._dirty = False
 
         # 可选音频数组输入文件（json/csv）
         self.audio_array_file = os.getenv("AI_AUDIO_ARRAY_FILE", "").strip()
@@ -63,6 +63,59 @@ class AIService:
                 continue
         return values
 
+    def load_history(self, session_id: str = "") -> None:
+        """从 conversations.json 加载会话历史到 self.history。"""
+        if not session_id:
+            session_id = self.session_id
+        if not session_id:
+            self.history = []
+            return
+        from ai_pipeline.tools.session_tools import load_messages
+        self.history = load_messages(session_id)
+        self.session_id = session_id
+        self._dirty = False
+
+    def save(self) -> None:
+        """保存当前 history 到 conversations.json 并更新元数据。"""
+        if not self._dirty or not self.session_id:
+            if not self.session_id:
+                import logging
+                logging.warning("[AIService.save] session_id 为空，跳过保存")
+            return
+        from ai_pipeline.tools.session_tools import save_messages, update_meta
+        save_messages(self.session_id, self.history)
+        update_meta(self.session_id)
+        self._dirty = False
+
+    def switch_to(self, session_id: str) -> list[dict]:
+        """保存当前会话，切换到指定会话。返回新会话的消息列表。"""
+        if session_id == self.session_id:
+            return self.history
+        self.save()
+        self.load_history(session_id)
+        return self.history
+
+    def _append_user(self, content: str) -> None:
+        self.history.append({"role": "user", "content": content})
+        self._dirty = True
+
+    def _append_assistant(self, content: str) -> None:
+        self.history.append({"role": "assistant", "content": content})
+        self._dirty = True
+
+    def _build_history_messages(self, max_messages: int = 20) -> list:
+        """将 self.history 转换为 HumanMessage/AIMessage 消息列表，用于注入 agent/LLM。"""
+        from langchain_core.messages import AIMessage, HumanMessage
+        msgs = []
+        for h in self.history:
+            role = h.get("role", "")
+            content = h.get("content", "")
+            if role == "user":
+                msgs.append(HumanMessage(content=content))
+            elif role == "assistant":
+                msgs.append(AIMessage(content=content))
+        return msgs[-max_messages:]
+
     def _infer_style(self, prompt: str) -> str:
         low = prompt.lower()
         if "neon" in low or "霓虹" in prompt:
@@ -76,11 +129,6 @@ class AIService:
     def generate(self, prompt: str, adjust: bool = False, temperature: float = 0.7, top_p: float = 0.9, mode: str = "plan") -> str:
         """根据 mode 分发：plan → 对话，build → Shader Agent 生成。"""
         del temperature, top_p
-
-        if not adjust:
-            self._session_seed = hashlib.md5(str(time.time()).encode("utf-8")).hexdigest()[:10]
-            self.session_id = f"web_{self._session_seed}"
-            self.history.clear()
 
         if mode == "build":
             return "Build 模式已升级为两阶段流程。请先调用 analyze 端点进行需求分析，确认后再调用 build 端点生成代码。"
@@ -180,17 +228,28 @@ class AIService:
                 + (f"\n\n## 分析流程（必须遵循）\n\n{skill_text}" if skill_text else "")
             )
 
+            # 注入对话历史作为上下文（不包含当前 prompt，_append_user 在 invoke 后）
+            history_msgs = self._build_history_messages()
+
             result = analyze_agent.invoke(
-                {"messages": [HumanMessage(content=user_content)]},
-                config={"recursion_limit": 10},
+                {"messages": history_msgs + [HumanMessage(content=user_content)]},
+                config={"recursion_limit": 100},
             )
             messages = result.get("messages", [])
+            reply = "分析未能完成，请重试。"
             for msg in reversed(messages):
                 if hasattr(msg, "content") and msg.content:
-                    return str(msg.content)
-            return "分析未能完成，请重试。"
-        except Exception:
-            return self._analyze_fallback(prompt, music_files)
+                    reply = str(msg.content)
+                    break
+            self._append_user(prompt)
+            self._append_assistant(reply)
+            self.save()
+            return reply
+        except Exception as e:
+            # agent 调用失败时才走 fallback；若在 append/save 阶段失败则直接返回
+            if not self.history or self.history[-1].get("role") != "assistant":
+                return self._analyze_fallback(prompt, music_files)
+            return f"分析失败: {e}"
 
     def _analyze_fallback(self, prompt: str, music_files: list[Path]) -> str:
         """分析降级方案：使用 skill 模板 + 纯 LLM。"""
@@ -214,9 +273,17 @@ class AIService:
                 f"## 分析流程（必须严格遵循）\n\n{skill_text}"
             ))
             resp = llm.invoke([msg])
-            return str(resp.content) if hasattr(resp, "content") else str(resp)
+            reply = str(resp.content) if hasattr(resp, "content") else str(resp)
+            self._append_user(prompt)
+            self._append_assistant(reply)
+            self.save()
+            return reply
         except Exception:
-            return f"分析失败，请重试。"
+            reply = f"分析失败，请重试。"
+            self._append_user(prompt)
+            self._append_assistant(reply)
+            self.save()
+            return reply
 
     def _load_audio_array_from_file(self, filepath: Path) -> list[float]:
         """从文件加载音频采样数组（复用 audio_tool 逻辑）。"""
@@ -238,6 +305,16 @@ class AIService:
             seed=None,
         )
 
+        # 构建对话历史文本
+        history_context = ""
+        if self.history:
+            lines = []
+            for h in self.history[-10:]:
+                role = "用户" if h.get("role") == "user" else "助手"
+                content = h.get("content", "")[:200]
+                lines.append(f"{role}: {content}")
+            history_context = "\n".join(lines)
+
         root = Path(__file__).resolve().parent.parent
         result = pipeline_generate(
             req=req,
@@ -246,11 +323,14 @@ class AIService:
             session_id=self.session_id,
             audio_array=self._load_audio_array(),
             analysis_context=analysis_context,
+            history_context=history_context,
         )
 
         code = result.glsl_code
         self.history.append({"role": "user", "content": prompt})
         self.history.append({"role": "assistant", "content": code})
+        self._dirty = True
+        self.save()
         return code
 
     def _plan_chat(self, prompt: str) -> str:
@@ -260,18 +340,32 @@ class AIService:
         if music_files:
             return self.analyze(prompt)
 
+        self._append_user(prompt)
         try:
             from ai_pipeline.llm.adapter import build_llm
             from langchain_core.messages import HumanMessage
             llm = build_llm(self.provider)
+            # 注入对话历史作为上下文，排除刚追加的当前 prompt
+            history_msgs = self._build_history_messages()
+            if history_msgs and history_msgs[-1].content == prompt:
+                history_msgs = history_msgs[:-1]
             msg = HumanMessage(content=(
                 "你是 MusicShader AI 助手，Plan 模式。简短回复（2-4 句），不生成代码。\n\n"
                 f"用户: {prompt}"
             ))
-            resp = llm.invoke([msg])
-            return str(resp.content) if hasattr(resp, "content") else str(resp)
+            resp = llm.invoke(history_msgs + [msg])
+            reply = str(resp.content) if hasattr(resp, "content") else str(resp)
+            # 检测 LLM 是否误输出 shader 代码（某些模型忽略"不生成代码"指令）
+            if "#version" in reply and ("void main" in reply or "mainImage" in reply):
+                reply = "检测到你希望生成 Shader，请按 **Shift+Tab** 切换到 **Build 模式** 生成代码。"
+            self._append_assistant(reply)
+            self.save()
+            return reply
         except Exception:
-            return f"收到: '{prompt}'\n\n需要生成 Shader？按 Shift+Tab 切换到 Build 模式。"
+            reply = f"收到: '{prompt}'\n\n需要生成 Shader？按 Shift+Tab 切换到 Build 模式。"
+            self._append_assistant(reply)
+            self.save()
+            return reply
 
     def stream_generate(self, prompt: str, adjust: bool = False, temperature: float = 0.7, top_p: float = 0.9) -> Iterator[str]:
         full = self.generate(prompt, adjust=adjust, temperature=temperature, top_p=top_p)

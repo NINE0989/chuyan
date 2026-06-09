@@ -135,11 +135,56 @@ main{flex:1;display:flex;overflow:hidden}
 .shader-card:hover{border-color:var(--accent);transform:translateY(-1px)}
 .shader-card .card-name{font-size:13px;font-weight:600;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .shader-card .card-info{font-size:10px;color:var(--text2)}
+
+/* ---- Shader Card Menu (three-dot) ---- */
+.shader-card{position:relative}
+.shader-card .card-menu-wrap{position:absolute;top:4px;right:4px;z-index:10}
+.shader-card .card-menu-btn{width:22px;height:22px;border-radius:4px;border:none;background:transparent;color:var(--text2);cursor:pointer;font-size:12px;display:none;align-items:center;justify-content:center;padding:0;line-height:1}
+.shader-card:hover .card-menu-btn{display:flex}
+.shader-card .card-menu-btn:hover{background:rgba(127,90,240,.15);color:var(--text)}
+.shader-card .card-menu{display:none;position:absolute;right:0;top:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;min-width:90px;z-index:40;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.5)}
+.shader-card .card-menu.show{display:block}
+.shader-card .card-menu-item{padding:6px 12px;font-size:11px;color:var(--text);cursor:pointer;white-space:nowrap;transition:background .1s}
+.shader-card .card-menu-item:hover{background:rgba(127,90,240,.12)}
+.shader-card .card-menu-item.danger{color:var(--danger)}
+.shader-card .card-menu-item.danger:hover{background:rgba(229,49,112,.1)}
 .overlay-close{cursor:pointer;float:right;font-size:18px;color:var(--text2);line-height:1}
 .overlay-close:hover{color:var(--danger)}
 
 /* Status bar */
 #status-bar{padding:4px 12px;font-size:10px;color:var(--text2);border-top:1px solid var(--border);flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* ---- Conversation Header & Dropdown ---- */
+#conv-header{display:flex;align-items:center;justify-content:space-between;padding:6px 12px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0}
+.conv-title{font-size:13px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;cursor:pointer}
+.conv-title:hover{color:var(--accent)}
+.conv-actions{display:flex;gap:4px}
+.conv-actions button{width:26px;height:26px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;transition:all .15s;padding:0}
+.conv-actions button:hover{background:rgba(127,90,240,.15);color:var(--text);border-color:var(--accent)}
+#conv-dropdown{display:none;position:absolute;top:0;left:0;right:0;bottom:0;background:var(--surface);z-index:30;flex-direction:column;border-radius:0}
+#conv-dropdown.show{display:flex}
+#conv-dropdown-header{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border);font-size:13px;font-weight:600;color:var(--text);flex-shrink:0}
+#conv-close-btn{cursor:pointer;font-size:16px;color:var(--text2);padding:2px 6px;border-radius:4px}
+#conv-close-btn:hover{color:var(--danger)}
+#conv-list{flex:1;overflow-y:auto;padding:4px 0}
+.conv-item{display:flex;align-items:center;gap:8px;padding:10px 14px;cursor:pointer;transition:all .15s;border-left:3px solid transparent}
+.conv-item:hover{background:rgba(127,90,240,.08)}
+.conv-item.active{background:rgba(127,90,240,.12);border-left-color:var(--accent)}
+.conv-item .conv-item-title{font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.conv-item .conv-item-meta{font-size:10px;color:var(--text2);white-space:nowrap}
+.conv-empty{padding:30px 14px;text-align:center;color:var(--text2);font-size:12px}
+
+/* ---- Conversation Item Menu (three-dot) ---- */
+.conv-item-menu-wrap{position:relative;flex-shrink:0}
+.conv-menu-btn{width:24px;height:24px;border-radius:4px;border:none;background:transparent;color:var(--text2);cursor:pointer;font-size:14px;display:none;align-items:center;justify-content:center;padding:0;line-height:1}
+.conv-item:hover .conv-menu-btn{display:flex}
+.conv-menu-btn:hover{background:rgba(127,90,240,.15);color:var(--text)}
+.conv-menu{display:none;position:absolute;right:0;top:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;min-width:100px;z-index:40;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.5)}
+.conv-menu.show{display:block}
+.conv-menu-item{padding:8px 14px;font-size:12px;color:var(--text);cursor:pointer;white-space:nowrap;transition:background .1s}
+.conv-menu-item:hover{background:rgba(127,90,240,.12)}
+.conv-menu-item.danger{color:var(--danger)}
+.conv-menu-item.danger:hover{background:rgba(229,49,112,.1)}
 
 .spinner{display:inline-block;width:14px;height:14px;border:2px solid var(--accent);border-top-color:transparent;border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:4px}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -163,6 +208,21 @@ main{flex:1;display:flex;overflow:hidden}
   <!-- Left: Chat -->
   <div id="chat-panel">
     <div id="chat-resize" title="拖动调整宽度"></div>
+    <!-- 会话管理标题栏 -->
+    <div id="conv-header">
+      <span id="conv-title" class="conv-title" onclick="toggleConvList()" title="切换对话">对话</span>
+      <div class="conv-actions">
+        <button onclick="newConversation()" title="新对话">＋</button>
+      </div>
+    </div>
+    <!-- 会话下拉面板 -->
+    <div id="conv-dropdown">
+      <div id="conv-dropdown-header">
+        <span>对话列表</span>
+        <span id="conv-close-btn" onclick="hideConvList()">✕</span>
+      </div>
+      <div id="conv-list"></div>
+    </div>
     <div id="chat-messages"></div>
     <div id="chat-input-row" style="position:relative">
       <div id="slash-dropdown"></div>
@@ -222,6 +282,9 @@ main{flex:1;display:flex;overflow:hidden}
 let currentCode = "", hasGeneratedOnce = false, currentPath = "", loading = false;
 let selectedMusic = null;
 let currentMode = "plan"; // plan | build
+let currentSessionId = null;
+let conversations = [];
+let convLoaded = false;
 
 // ============ Mode Toggle (Shift+Tab) ============
 function setMode(mode) {
@@ -231,14 +294,198 @@ function setMode(mode) {
   if (mode === "build") {
     el.textContent = "🔨 Build";
     el.style.background = "var(--accent)"; el.style.color = "#fff";
-    inp.placeholder = "描述 Shader 效果... Enter 发送, Shift+Enter 换行";
+    inp.placeholder = "描述 Shader 效果...";
     setStatus("🔨 Build 模式 — 输入需求生成 Shader");
   } else {
     el.textContent = "📋 Plan";
     el.style.background = "transparent"; el.style.color = "var(--accent2)";
-    inp.placeholder = "随意聊聊... Enter 发送, Shift+Enter 换行";
+    inp.placeholder = "随意聊聊...";
     setStatus("📋 Plan 模式 — 对话交流，梳理需求");
   }
+}
+// ============ Conversation Management ============
+function updateConvTitle(title) {
+  document.getElementById("conv-title").textContent = title;
+}
+function renderConvList() {
+  const list = document.getElementById("conv-list");
+  if (!conversations.length) {
+    list.innerHTML = '<div class="conv-empty">暂无对话</div>';
+    return;
+  }
+  list.innerHTML = conversations.map(c => {
+    const active = c.session_id === currentSessionId ? ' active' : '';
+    const title = c.title || '对话';
+    const time = c.updated_at || '';
+    const pinText = c.pinned ? '取消置顶' : '置顶';
+    return `<div class="conv-item${active}" onclick="switchConversation('${c.session_id}')">
+      <span class="conv-item-title">${escapeHtml(title)}</span>
+      <span class="conv-item-meta">${time}</span>
+      <div class="conv-item-menu-wrap" onclick="event.stopPropagation()">
+        <button class="conv-menu-btn" onclick="toggleConvMenu('${c.session_id}', this)">⋮</button>
+        <div class="conv-menu" id="conv-menu-${c.session_id}">
+          <div class="conv-menu-item" onclick="renameConversation('${c.session_id}')">重命名</div>
+          <div class="conv-menu-item" onclick="pinConversation('${c.session_id}', ${!c.pinned})">${pinText}</div>
+          <div class="conv-menu-item danger" onclick="deleteConversation('${c.session_id}')">删除</div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+async function loadConversations() {
+  try {
+    const r = await fetch("/api/conversations");
+    conversations = await r.json();
+    renderConvList();
+    if (!currentSessionId && conversations.length) {
+      await switchConversation(conversations[0].session_id);
+    } else if (!currentSessionId) {
+      await newConversation();
+    }
+  } catch(e) {
+    console.error("加载会话列表失败", e);
+  }
+}
+async function newConversation() {
+  hideConvList();
+  try {
+    const r = await fetch("/api/conversations/new", {method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});
+    const d = await r.json();
+    currentSessionId = d.session_id;
+    document.getElementById("chat-messages").innerHTML = "";
+    document.getElementById("code-editor").value = "";
+    currentCode = "";
+    hasGeneratedOnce = false;
+    updateConvTitle("新对话");
+    convLoaded = false;
+    await loadConversations();
+  } catch(e) {
+    console.error("创建会话失败", e);
+  }
+}
+async function switchConversation(sessionId) {
+  hideConvList();
+  if (sessionId === currentSessionId && convLoaded) return;
+  try {
+    const r = await fetch("/api/conversations/switch", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({session_id: sessionId})});
+    const d = await r.json();
+    currentSessionId = d.session_id;
+    // 渲染消息
+    const container = document.getElementById("chat-messages");
+    container.innerHTML = "";
+    if (d.messages && d.messages.length) {
+      for (const m of d.messages) {
+        const isShader = m.content && (m.content.includes("#version") || m.content.includes("void main"));
+        addMessage(m.role, m.content, isShader || m.role === "assistant");
+      }
+    }
+    // 显示欢迎语（仅空对话）
+    if (!d.messages || !d.messages.length) {
+      addMessage("ai","🤖 <b>MusicShader</b> 就绪<br>📋 <b>Plan</b> 模式 = 对话交流<br>🔨 <b>Build</b> 模式 = 生成 Shader<br><br>按 <b>Shift+Tab</b> 切换模式<br>输入 <b>/</b> 快速引用音乐库", true);
+    }
+    convLoaded = true;
+    // 从会话列表查找标题
+    const found = conversations.find(c => c.session_id === sessionId);
+    updateConvTitle(found ? (found.title || "对话") : "对话");
+    // 检查最后一条消息是否为 shader 代码，加载到编辑器
+    hasGeneratedOnce = false;
+    if (d.messages && d.messages.length) {
+      for (let i = d.messages.length - 1; i >= 0; i--) {
+        const m = d.messages[i];
+        if (m.role === "assistant" && m.content && (m.content.includes("#version") || m.content.includes("void main"))) {
+          let cleanCode = m.content.replace(/^\/\/ AI_PIPELINE_HOOK\n\/\/ style_profile: .+\n\/\/ generated_with: .+\n/gm, '').trim();
+          if (cleanCode.includes("#version") || cleanCode.includes("void main")) {
+            currentCode = cleanCode;
+            hasGeneratedOnce = true;
+            document.getElementById("code-editor").value = cleanCode;
+          }
+          break;
+        }
+      }
+    }
+    await loadConversations();
+  } catch(e) {
+    console.error("切换会话失败", e);
+  }
+}
+async function deleteCurrentConversation() {
+  if (!currentSessionId) return;
+  if (!confirm("确定删除当前对话？")) return;
+  try {
+    await fetch("/api/conversations/delete", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({session_id: currentSessionId})});
+    document.getElementById("chat-messages").innerHTML = "";
+    currentSessionId = null;
+    convLoaded = false;
+    await loadConversations();
+  } catch(e) {
+    console.error("删除会话失败", e);
+  }
+}
+async function deleteConversation(sessionId) {
+  if (!confirm("确定删除此对话？")) return;
+  try {
+    await fetch("/api/conversations/delete", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({session_id: sessionId})});
+    if (sessionId === currentSessionId) {
+      document.getElementById("chat-messages").innerHTML = "";
+      currentSessionId = null;
+      convLoaded = false;
+    }
+    await loadConversations();
+  } catch(e) {
+    console.error("删除会话失败", e);
+  }
+}
+function toggleConvList() {
+  const dd = document.getElementById("conv-dropdown");
+  dd.classList.toggle("show");
+  if (dd.classList.contains("show")) renderConvList();
+}
+function hideConvList() {
+  document.getElementById("conv-dropdown").classList.remove("show");
+  // 关闭所有菜单
+  document.querySelectorAll(".conv-menu.show").forEach(m => m.classList.remove("show"));
+}
+function toggleConvMenu(sessionId, btn) {
+  const menu = document.getElementById("conv-menu-" + sessionId);
+  const isShow = menu.classList.contains("show");
+  // 先关闭所有其他菜单
+  document.querySelectorAll(".conv-menu.show").forEach(m => m.classList.remove("show"));
+  if (!isShow) menu.classList.add("show");
+}
+async function pinConversation(sessionId, pinned) {
+  try {
+    await fetch("/api/conversations/pin", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({session_id: sessionId, pinned})});
+    await loadConversations();
+  } catch(e) {
+    console.error("置顶失败", e);
+  }
+}
+async function renameConversation(sessionId) {
+  const found = conversations.find(c => c.session_id === sessionId);
+  const oldTitle = found ? (found.title || "对话") : "对话";
+  const newTitle = prompt("输入新对话名称：", oldTitle);
+  if (!newTitle || newTitle.trim() === oldTitle) return;
+  try {
+    hideConvList();
+    await fetch("/api/conversations/rename", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({session_id: sessionId, title: newTitle.trim()})});
+    if (sessionId === currentSessionId) updateConvTitle(newTitle.trim());
+    await loadConversations();
+  } catch(e) {
+    console.error("重命名失败", e);
+  }
+}
+// 全局点击关闭菜单
+document.addEventListener("click", (e) => {
+  if (!e.target.closest(".conv-menu-item") && !e.target.closest(".conv-menu-btn")) {
+    document.querySelectorAll(".conv-menu.show").forEach(m => m.classList.remove("show"));
+  }
+  if (!e.target.closest(".card-menu-item") && !e.target.closest(".card-menu-btn")) {
+    document.querySelectorAll(".card-menu.show").forEach(m => m.classList.remove("show"));
+  }
+});
+function escapeHtml(s) {
+  if (!s) return "";
+  return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 }
 document.addEventListener("keydown", e => {
   if (e.key === "Tab" && e.shiftKey && !document.getElementById("slash-dropdown").classList.contains("show")) {
@@ -379,6 +626,7 @@ async function streamSSE(url, body, onChunk, onDone) {
         try {
           const d = JSON.parse(payload);
           if (d.error) { onDone("❌ " + d.error); return; }
+          if (d.session_id) { currentSessionId = d.session_id; continue; }
           fullText += d.chunk;
           // 去掉 initial heartbeat "."
           if (fullText === ".") { fullText = ""; }
@@ -399,7 +647,7 @@ async function doChatStream(prompt) {
   document.getElementById("chat-messages").appendChild(msgEl);
   const bubbleEl = msgEl.querySelector(".bubble");
 
-  await streamSSE("/api/chat/stream", {prompt, adjust:hasGeneratedOnce, mode:currentMode},
+  await streamSSE("/api/chat/stream", {prompt, adjust:hasGeneratedOnce, mode:currentMode, session_id:currentSessionId},
     (fullText) => { bubbleEl.innerHTML = renderMd(fullText); msgEl.scrollIntoView({behavior:"smooth"}); },
     (err, fullText) => {
       loading = false; document.getElementById("send-btn").disabled = false;
@@ -433,7 +681,7 @@ async function doAnalyze(prompt) {
   document.getElementById("chat-messages").appendChild(msgEl);
   const bubbleEl = msgEl.querySelector(".bubble");
 
-  await streamSSE("/api/chat/analyze", {prompt, mode:"build"},
+  await streamSSE("/api/chat/analyze", {prompt, mode:"build", session_id:currentSessionId},
     (fullText) => { bubbleEl.innerHTML = renderMd(fullText); msgEl.scrollIntoView({behavior:"smooth"}); },
     (err, analysisText) => {
       loading = false; document.getElementById("send-btn").disabled = false;
@@ -461,7 +709,7 @@ async function doBuild(prompt, analysisContext) {
   document.getElementById("chat-messages").appendChild(msgEl);
   const bubbleEl = msgEl.querySelector(".bubble");
 
-  await streamSSE("/api/chat/build", {prompt, analysis_context:analysisContext, mode:"build"},
+  await streamSSE("/api/chat/build", {prompt, analysis_context:analysisContext, mode:"build", session_id:currentSessionId},
     (fullText) => { bubbleEl.innerHTML = renderMd(fullText); msgEl.scrollIntoView({behavior:"smooth"}); },
     (err, fullText) => {
       loading = false; document.getElementById("send-btn").disabled = false;
@@ -508,8 +756,16 @@ async function showShaderLib() {
   grid.innerHTML = '<div class="spinner"></div>';
   const r = await fetch("/api/shaders");
   const files = await r.json();
-  grid.innerHTML = files.length ? files.map(f => `<div class="shader-card" onclick="loadShader('${f.path}','${f.name}')">
-    <div class="card-name">🎨 ${f.name}</div><div class="card-info">${fmtSize(f.size)} · ${f.modified}</div>
+  grid.innerHTML = files.length ? files.map(f => `<div class="shader-card" onclick="loadShader('${escapeJs(f.path)}','${escapeJs(f.name)}')">
+    <div class="card-name">🎨 ${escapeHtml(f.name)}</div>
+    <div class="card-info">${fmtSize(f.size)} · ${f.modified}</div>
+    <div class="card-menu-wrap" onclick="event.stopPropagation()">
+      <button class="card-menu-btn" onclick="toggleShaderMenu('${escapeJs(f.path)}', this)">⋮</button>
+      <div class="card-menu" id="shader-menu-${f.path.replace(/[^a-zA-Z0-9]/g,'_')}">
+        <div class="card-menu-item" onclick="renameShader('${escapeJs(f.path)}','${escapeJs(f.name)}')">重命名</div>
+        <div class="card-menu-item danger" onclick="deleteShader('${escapeJs(f.path)}','${escapeJs(f.name)}')">删除</div>
+      </div>
+    </div>
   </div>`).join("") : '<div style="color:var(--text2);padding:20px;text-align:center">暂无 Shader</div>';
 }
 async function loadShader(path, name) {
@@ -517,6 +773,38 @@ async function loadShader(path, name) {
   const d = await r.json();
   if (d.code) { currentCode=d.code;currentPath=path;document.getElementById("code-editor").value=d.code; document.getElementById("shader-overlay").classList.remove("show"); setStatus("加载: "+name); }
   else setStatus("❌ "+d.error);
+}
+function toggleShaderMenu(path, btn) {
+  const id = 'shader-menu-' + path.replace(/[^a-zA-Z0-9]/g, '_');
+  const menu = document.getElementById(id);
+  if (!menu) return;
+  const isShow = menu.classList.contains("show");
+  document.querySelectorAll(".card-menu.show").forEach(m => m.classList.remove("show"));
+  if (!isShow) menu.classList.add("show");
+}
+async function renameShader(path, oldName) {
+  const newName = prompt("输入新名称（不含扩展名）：", oldName.replace(/\.glsl$/i, ""));
+  if (!newName || newName.trim() === oldName.replace(/\.glsl$/i, "")) return;
+  closeShaderMenus();
+  try {
+    const r = await fetch("/api/shader/rename", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path, name: newName.trim()})});
+    const d = await r.json();
+    if (d.ok) { showShaderLib(); setStatus("✅ 已重命名为: " + newName.trim() + ".glsl"); }
+    else setStatus("❌ " + (d.error || "重命名失败"));
+  } catch(e) { setStatus("❌ 重命名失败"); }
+}
+async function deleteShader(path, name) {
+  if (!confirm("确定删除「" + name + "」？")) return;
+  closeShaderMenus();
+  try {
+    const r = await fetch("/api/shader/delete", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path})});
+    const d = await r.json();
+    if (d.ok) { showShaderLib(); setStatus("🗑️ 已删除: " + name); }
+    else setStatus("❌ " + (d.error || "删除失败"));
+  } catch(e) { setStatus("❌ 删除失败"); }
+}
+function closeShaderMenus() {
+  document.querySelectorAll(".card-menu.show").forEach(m => m.classList.remove("show"));
 }
 
 // ============ Music Library ============
@@ -739,7 +1027,7 @@ function fmtSize(b) { return b<1024?b+"B":b<1048576?(b/1024).toFixed(1)+"KB":(b/
 
 // ============ Init ============
 (async ()=>{
-  addMessage("ai","🤖 <b>MusicShader</b> 就绪<br>📋 <b>Plan</b> 模式 = 对话交流<br>🔨 <b>Build</b> 模式 = 生成 Shader<br><br>按 <b>Shift+Tab</b> 切换模式<br>输入 <b>/</b> 快速引用音乐库", true);
+  await loadConversations();
   loadMusicCache(); loadMusic();
 })();
 </script>
