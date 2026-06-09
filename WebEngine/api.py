@@ -56,7 +56,11 @@ class APIHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def _send_file(self, path, content_type):
-        fp = self._html_dir() / path
+        fp = (self._html_dir() / path).resolve()
+        html_root = self._html_dir().resolve()
+        if html_root not in fp.parents and fp != html_root:
+            self.send_error(403)
+            return
         if fp.is_file():
             content = fp.read_bytes()
             self.send_response(200)
@@ -76,6 +80,14 @@ class APIHandler(BaseHTTPRequestHandler):
         except json.JSONDecodeError:
             return {}
 
+    def _debug_error_message(self, prefix: str, exc: Exception, fallback: str) -> str:
+        """Return detailed errors only when MS_DEBUG_ERRORS=1 is set."""
+        if os.getenv("MS_DEBUG_ERRORS", "").strip() == "1":
+            import traceback
+            traceback.print_exc()
+            return f"{prefix}：{type(exc).__name__}: {exc}"
+        return fallback
+
     # ---- Static files ----
     def do_GET(self):
         path = self.path.split("?")[0]
@@ -84,10 +96,23 @@ class APIHandler(BaseHTTPRequestHandler):
             from urllib.parse import parse_qs
             params = {k: v[0] for k, v in parse_qs(self.path.split("?", 1)[1]).items()}
 
-        if path == "/" or path == "/index.html":
+        if path == "/" or path == "/frontend_v2.html":
+            self._send_file("frontend_v2.html", "text/html; charset=utf-8")
+        elif path == "/index.html":
             self._send_file("index.html", "text/html; charset=utf-8")
         elif path == "/settings.html":
             self._send_file("settings.html", "text/html; charset=utf-8")
+        elif path.startswith("/static/"):
+            content_types = {
+                ".css": "text/css; charset=utf-8",
+                ".js": "application/javascript; charset=utf-8",
+                ".png": "image/png",
+                ".jpg": "image/jpeg",
+                ".jpeg": "image/jpeg",
+                ".svg": "image/svg+xml",
+            }
+            static_path = path.lstrip("/")
+            self._send_file(static_path, content_types.get(Path(static_path).suffix, "application/octet-stream"))
         elif path == "/api/settings":
             self._send_json(self.settings.to_dict())
         elif path == "/api/shaders":
@@ -247,8 +272,8 @@ class APIHandler(BaseHTTPRequestHandler):
         analysis = ""
         try:
             analysis = self.ai.analyze(prompt)
-        except Exception:
-            analysis = "分析失败，请重试。"
+        except Exception as e:
+            analysis = self._debug_error_message("分析失败", e, "分析失败，请重试。")
 
         # 流式输出分析结果
         chunk_size = max(2, len(analysis) // 50) if len(analysis) > 50 else 1
@@ -303,8 +328,8 @@ class APIHandler(BaseHTTPRequestHandler):
         code = ""
         try:
             code = self.ai._build_shader(prompt, adjust=False, analysis_context=analysis_context)
-        except Exception:
-            code = "生成失败，请重试。"
+        except Exception as e:
+            code = self._debug_error_message("生成失败", e, "生成失败，请重试。")
 
         is_shader = "#version" in code or "void main" in code
         rtype = "shader" if is_shader else "chat"

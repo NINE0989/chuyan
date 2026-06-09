@@ -1,0 +1,1093 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MusicShader</title>
+<link rel="stylesheet" href="./static/code-blocks.css?v=20260610_stable_scrollbar">
+<style>
+:root {
+  --bg: #0f0e17; --surface: #1a1930; --border: #2d2a4a;
+  --accent: #7f5af0; --accent2: #2cb67d; --text: #fffffe; --text2: #94a1b2;
+  --danger: #e53170; --warn: #f9c74f;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:"Segoe UI",system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);height:100vh;display:flex;flex-direction:column;overflow:hidden}
+
+/* ===== Header ===== */
+header{
+  background:linear-gradient(135deg,#1a1930 0%,#232052 100%);
+  padding:8px 16px;display:flex;align-items:center;justify-content:space-between;
+  border-bottom:1px solid var(--border);flex-shrink:0;z-index:10;
+}
+.header-left{display:flex;align-items:center;gap:12px}
+.logo{font-size:20px;font-weight:800;letter-spacing:-0.5px}
+.logo .ms{color:var(--accent)}.logo .s{color:var(--accent2)}
+.header-right{display:flex;gap:6px;align-items:center}
+.header-right button{padding:6px 12px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-size:12px;transition:all .2s}
+.header-right button:hover{background:rgba(127,90,240,.15);color:var(--text);border-color:var(--accent)}
+.header-right button.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+
+/* ===== Main Layout ===== */
+main{flex:1;display:flex;overflow:hidden}
+
+/* ---- Chat Panel (Left) ---- */
+#chat-panel{width:360px;flex-shrink:0;display:flex;flex-direction:column;position:relative}
+#chat-resize{position:absolute;right:0;top:0;bottom:0;width:4px;cursor:ew-resize;z-index:5;transition:background .2s}
+#chat-resize:hover,#chat-resize.dragging{background:var(--accent)}
+#chat-messages{flex:1;overflow-y:auto;padding:12px 16px;scroll-behavior:smooth}
+#chat-messages::-webkit-scrollbar{width:6px}
+#chat-messages::-webkit-scrollbar-track{background:transparent}
+#chat-messages::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+#chat-messages::-webkit-scrollbar-thumb:hover{background:var(--accent)}
+.msg{display:flex;gap:8px;margin-bottom:10px;align-items:flex-start;animation:fadeIn .3s}
+.msg.user{flex-direction:row-reverse}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.msg .avatar{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0}
+.msg.user .avatar{background:linear-gradient(135deg,var(--accent),#624de3);color:#fff}
+.msg.ai .avatar{background:var(--surface);color:var(--text2);font-weight:700;border:1px solid var(--border)}
+.msg .bubble{max-width:85%;padding:8px 12px;border-radius:12px;font-size:13px;line-height:1.5;white-space:pre-wrap;word-break:break-word}
+.msg.user .bubble{background:var(--accent);color:#fff;border-bottom-right-radius:4px}
+.msg.ai .bubble{background:var(--surface);color:#ccc;border:1px solid var(--border);border-bottom-left-radius:4px}
+.msg .bubble code{background:rgba(0,0,0,.3);padding:2px 5px;border-radius:4px;font-size:11px}
+.msg .bubble pre{background:rgba(0,0,0,.4);padding:8px 10px;border-radius:6px;overflow-x:auto;font-size:11px;margin:6px 0}
+.msg .bubble pre code{background:none;padding:0}
+.msg .bubble ul,.msg .bubble ol{padding-left:18px;margin:4px 0}
+.msg .bubble li{margin:2px 0}
+.msg .bubble h2,.msg .bubble h3,.msg .bubble h4{margin:8px 0 4px;font-size:13px}
+.msg .bubble p{margin:4px 0}
+.msg .bubble b{color:var(--accent2)}
+.msg .bubble hr{border:none;border-top:1px solid var(--border);margin:10px 0}
+.msg .bubble table{width:100%;border-collapse:collapse;margin:6px 0;font-size:11px}
+.msg .bubble td{padding:3px 8px;border:1px solid var(--border)}
+.msg .bubble tr:first-child td{font-weight:600;background:rgba(127,90,240,.1)}
+.msg .bubble blockquote{border-left:3px solid var(--accent);margin:6px 0;padding:4px 10px;color:var(--text2)}
+/* Analysis card */
+.analysis-actions{display:flex;gap:8px;margin-top:12px;padding-top:10px;border-top:1px solid var(--border)}
+.analysis-actions button{padding:8px 16px;border-radius:8px;border:none;cursor:pointer;font-size:12px;font-weight:600;transition:all .2s}
+.btn-confirm{background:var(--accent);color:#fff}
+.btn-confirm:hover{background:#8b6af5;transform:translateY(-1px)}
+.btn-modify{background:rgba(255,255,255,.08);color:var(--text2);border:1px solid var(--border)}
+.btn-modify:hover{background:rgba(255,255,255,.12);color:var(--text)}
+#chat-input-row{display:flex;gap:6px;padding:8px 12px;background:var(--surface);border-top:1px solid var(--border)}
+#chat-input-row textarea{flex:1;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;outline:none;resize:none;font-family:inherit;line-height:1.5;max-height:120px;overflow-y:auto}
+#chat-input-row textarea:focus{border-color:var(--accent)}
+#chat-input-row button{padding:8px 16px;border-radius:8px;border:none;background:var(--accent);color:#fff;cursor:pointer;font-size:13px;font-weight:600;transition:all .2s}
+#chat-input-row button:hover{transform:translateY(-1px)}
+#chat-input-row button:disabled{opacity:.5;cursor:not-allowed;transform:none}
+#mic-btn{padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);cursor:pointer;font-size:16px;transition:all .2s}
+#mic-btn:hover{border-color:var(--accent)}
+#mic-btn.recording{background:#ef4444;color:#fff;border-color:#ef4444;animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+/* Autocomplete */
+#slash-dropdown{position:absolute;bottom:100%;left:0;right:0;max-height:200px;overflow-y:auto;background:var(--surface);border:1px solid var(--border);border-radius:8px;display:none;z-index:20;margin-bottom:4px;box-shadow:0 -4px 16px rgba(0,0,0,.4)}
+#slash-dropdown.show{display:block}
+.slash-item{padding:8px 14px;cursor:pointer;font-size:12px;color:var(--text2);display:flex;align-items:center;gap:8px;border-bottom:1px solid rgba(255,255,255,.03)}
+.slash-item:hover,.slash-item.active{background:rgba(127,90,240,.15);color:var(--text)}
+.slash-item .si-icon{font-size:14px;flex-shrink:0}
+.slash-item .si-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.slash-item .si-hint{font-size:10px;color:var(--text2);opacity:.6}
+
+/* ---- Center (Code + Preview) ---- */
+#center-panel{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:300px}
+#code-section{flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:120px}
+#editor-header{padding:6px 12px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border);font-size:11px;color:var(--text2);background:var(--surface)}
+#editor-header .dot{width:7px;height:7px;border-radius:50%;background:var(--accent2);display:inline-block;margin-right:6px}
+#code-editor{flex:1;width:100%;padding:12px;background:var(--bg);color:#c9d1d9;border:none;resize:none;font-family:"Cascadia Code","Fira Code",Consolas,monospace;font-size:12px;line-height:1.6;outline:none;tab-size:4}
+#editor-actions{display:flex;gap:6px;padding:6px 12px;border-top:1px solid var(--border);background:var(--surface)}
+#editor-actions button{padding:6px 12px;border-radius:6px;border:none;cursor:pointer;font-size:11px;font-weight:600;transition:all .2s}
+.btn-apply{background:var(--accent2);color:#000}.btn-apply:hover{background:#3cc76a}
+.btn-save{background:rgba(127,90,240,.15);color:var(--accent)}.btn-save:hover{background:rgba(127,90,240,.25)}
+.btn-deploy{background:linear-gradient(135deg,var(--accent),#624de3);color:#fff}.btn-deploy:hover{opacity:.9}
+
+/* ---- Drag Handle ---- */
+#drag-handle{height:4px;background:var(--border);cursor:ns-resize;flex-shrink:0;transition:background .2s}
+#drag-handle:hover,#drag-handle.dragging{background:var(--accent)}
+
+/* ---- Preview Section ---- */
+#preview-section{flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:80px;background:#000;position:relative}
+#preview-section canvas{width:100%;height:100%;display:block}
+.preview-error{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:var(--danger);text-align:center;max-width:80%;font-size:13px;line-height:1.5}
+#preview-overlay{position:absolute;bottom:6px;left:6px;font-size:10px;color:var(--text2)}
+#preview-overlay .tag{background:rgba(0,0,0,.6);padding:2px 8px;border-radius:4px;margin-right:4px}
+
+/* ---- Right: Music Library ---- */
+#music-panel{width:220px;flex-shrink:0;display:flex;flex-direction:column;background:var(--surface);position:relative}
+#music-resize{position:absolute;left:0;top:0;bottom:0;width:4px;cursor:ew-resize;z-index:5;transition:background .2s}
+#music-resize:hover,#music-resize.dragging{background:var(--accent)}
+#music-header{padding:10px 14px;border-bottom:1px solid var(--border);font-size:13px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:6px;flex-shrink:0}
+#music-header .count{font-size:11px;color:var(--text2);font-weight:400}
+#music-list{flex:1;overflow-y:auto;padding:6px 0}
+.music-item{display:flex;align-items:center;gap:8px;padding:7px 14px;cursor:pointer;font-size:12px;color:var(--text2);transition:all .15s;border-left:2px solid transparent}
+.music-item:hover{background:rgba(127,90,240,.08);color:var(--text)}
+.music-item.selected{background:rgba(44,182,125,.1);color:var(--text);border-left-color:var(--accent2)}
+.music-item .icon{font-size:14px;flex-shrink:0;width:20px;text-align:center}
+.music-item .name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.music-item .ext{font-size:10px;color:var(--text2);background:rgba(255,255,255,.05);padding:1px 6px;border-radius:3px}
+
+/* ---- Overlay panels ---- */
+.overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.7);z-index:100;justify-content:center;align-items:center}
+.overlay.show{display:flex}
+.overlay-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:24px;max-width:700px;width:90%;max-height:80vh;overflow-y:auto}
+.overlay-card h3{font-size:16px;margin-bottom:12px;color:var(--text)}
+#shader-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px}
+.shader-card{background:var(--bg);border-radius:10px;padding:12px;cursor:pointer;border:1px solid var(--border);transition:all .2s}
+.shader-card:hover{border-color:var(--accent);transform:translateY(-1px)}
+.shader-card .card-name{font-size:13px;font-weight:600;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.shader-card .card-info{font-size:10px;color:var(--text2)}
+
+/* ---- Shader Card Menu (three-dot) ---- */
+.shader-card{position:relative}
+.shader-card .card-menu-wrap{position:absolute;top:4px;right:4px;z-index:10}
+.shader-card .card-menu-btn{width:22px;height:22px;border-radius:4px;border:none;background:transparent;color:var(--text2);cursor:pointer;font-size:12px;display:none;align-items:center;justify-content:center;padding:0;line-height:1}
+.shader-card:hover .card-menu-btn{display:flex}
+.shader-card .card-menu-btn:hover{background:rgba(127,90,240,.15);color:var(--text)}
+.shader-card .card-menu{display:none;position:absolute;right:0;top:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;min-width:90px;z-index:40;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.5)}
+.shader-card .card-menu.show{display:block}
+.shader-card .card-menu-item{padding:6px 12px;font-size:11px;color:var(--text);cursor:pointer;white-space:nowrap;transition:background .1s}
+.shader-card .card-menu-item:hover{background:rgba(127,90,240,.12)}
+.shader-card .card-menu-item.danger{color:var(--danger)}
+.shader-card .card-menu-item.danger:hover{background:rgba(229,49,112,.1)}
+.overlay-close{cursor:pointer;float:right;font-size:18px;color:var(--text2);line-height:1}
+.overlay-close:hover{color:var(--danger)}
+
+/* Status bar */
+#status-bar{padding:4px 12px;font-size:10px;color:var(--text2);border-top:1px solid var(--border);flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* ---- Conversation Header & Dropdown ---- */
+#conv-header{display:flex;align-items:center;justify-content:space-between;padding:6px 12px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0}
+.conv-title{font-size:13px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;cursor:pointer}
+.conv-title:hover{color:var(--accent)}
+.conv-actions{display:flex;gap:4px}
+.conv-actions button{width:26px;height:26px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;transition:all .15s;padding:0}
+.conv-actions button:hover{background:rgba(127,90,240,.15);color:var(--text);border-color:var(--accent)}
+#conv-dropdown{display:none;position:absolute;top:0;left:0;right:0;bottom:0;background:var(--surface);z-index:30;flex-direction:column;border-radius:0}
+#conv-dropdown.show{display:flex}
+#conv-dropdown-header{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border);font-size:13px;font-weight:600;color:var(--text);flex-shrink:0}
+#conv-close-btn{cursor:pointer;font-size:16px;color:var(--text2);padding:2px 6px;border-radius:4px}
+#conv-close-btn:hover{color:var(--danger)}
+#conv-list{flex:1;overflow-y:auto;padding:4px 0}
+.conv-item{display:flex;align-items:center;gap:8px;padding:10px 14px;cursor:pointer;transition:all .15s;border-left:3px solid transparent}
+.conv-item:hover{background:rgba(127,90,240,.08)}
+.conv-item.active{background:rgba(127,90,240,.12);border-left-color:var(--accent)}
+.conv-item .conv-item-title{font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.conv-item .conv-item-meta{font-size:10px;color:var(--text2);white-space:nowrap}
+.conv-empty{padding:30px 14px;text-align:center;color:var(--text2);font-size:12px}
+
+/* ---- Conversation Item Menu (three-dot) ---- */
+.conv-item-menu-wrap{position:relative;flex-shrink:0}
+.conv-menu-btn{width:24px;height:24px;border-radius:4px;border:none;background:transparent;color:var(--text2);cursor:pointer;font-size:14px;display:none;align-items:center;justify-content:center;padding:0;line-height:1}
+.conv-item:hover .conv-menu-btn{display:flex}
+.conv-menu-btn:hover{background:rgba(127,90,240,.15);color:var(--text)}
+.conv-menu{display:none;position:absolute;right:0;top:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;min-width:100px;z-index:40;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.5)}
+.conv-menu.show{display:block}
+.conv-menu-item{padding:8px 14px;font-size:12px;color:var(--text);cursor:pointer;white-space:nowrap;transition:background .1s}
+.conv-menu-item:hover{background:rgba(127,90,240,.12)}
+.conv-menu-item.danger{color:var(--danger)}
+.conv-menu-item.danger:hover{background:rgba(229,49,112,.1)}
+
+.spinner{display:inline-block;width:14px;height:14px;border:2px solid var(--accent);border-top-color:transparent;border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:4px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+@media(max-width:800px){#chat-panel{width:260px}#music-panel{width:180px}}
+</style>
+</head>
+<body>
+<header>
+  <div class="header-left">
+    <span class="logo"><span class="ms">Music</span><span class="s">S</span>hader</span>
+    <span id="mode-indicator" style="font-size:12px;padding:4px 10px;border-radius:6px;border:1px solid var(--border);cursor:pointer" onclick="setMode(currentMode==='plan'?'build':'plan')" title="Shift+Tab 切换">📋 Plan</span>
+  </div>
+  <div class="header-right">
+    <button onclick="showShaderLib()">📂 Shader 库</button>
+    <button onclick="document.getElementById('settings-overlay').classList.add('show')">⚙ 设置</button>
+  </div>
+</header>
+
+<main>
+  <!-- Left: Chat -->
+  <div id="chat-panel">
+    <div id="chat-resize" title="拖动调整宽度"></div>
+    <!-- 会话管理标题栏 -->
+    <div id="conv-header">
+      <span id="conv-title" class="conv-title" onclick="toggleConvList()" title="切换对话">对话</span>
+      <div class="conv-actions">
+        <button onclick="newConversation()" title="新对话">＋</button>
+      </div>
+    </div>
+    <!-- 会话下拉面板 -->
+    <div id="conv-dropdown">
+      <div id="conv-dropdown-header">
+        <span>对话列表</span>
+        <span id="conv-close-btn" onclick="hideConvList()">✕</span>
+      </div>
+      <div id="conv-list"></div>
+    </div>
+    <div id="chat-messages"></div>
+    <div id="chat-input-row" style="position:relative">
+      <div id="slash-dropdown"></div>
+      <button id="mic-btn" onclick="toggleRecording()" title="语音输入">🎤</button>
+      <textarea id="chat-input" rows="1" placeholder="描述视觉需求..."></textarea>
+      <button id="send-btn" onclick="sendMessage()">发送</button>
+    </div>
+  </div>
+
+  <!-- Center: Code + Preview -->
+  <div id="center-panel">
+    <div id="code-section">
+      <div id="editor-header"><span><span class="dot"></span>GLSL 代码编辑器</span><span id="editor-status" style="color:var(--accent2)"></span></div>
+      <textarea id="code-editor" placeholder="GLSL 代码将在 AI 生成后显示在这里&#10;也可以直接粘贴 GLSL 代码编辑" spellcheck="false"></textarea>
+      <div id="editor-actions">
+        <button class="btn-apply" onclick="applyShader()">▶ 应用</button>
+        <button class="btn-save" onclick="saveShader()">💾 保存</button>
+        <button class="btn-deploy" onclick="deployShader()">🚀 部署</button>
+      </div>
+    </div>
+    <div id="drag-handle" title="拖动调整编辑器高度"></div>
+    <div id="preview-section">
+      <canvas id="gl-canvas"></canvas>
+      <div class="preview-error" id="preview-error" style="display:none"></div>
+      <div id="preview-overlay"></div>
+    </div>
+    <div id="status-bar">就绪</div>
+  </div>
+
+  <!-- Right: Music Library -->
+  <div id="music-panel">
+    <div id="music-resize" title="拖动调整宽度"></div>
+    <div id="music-header">🎵 音乐库 <span class="count" id="music-count">0</span></div>
+    <div id="music-list"></div>
+  </div>
+</main>
+
+<!-- Shader Library Overlay -->
+<div class="overlay" id="shader-overlay" onclick="if(event.target===this)this.classList.remove('show')">
+  <div class="overlay-card">
+    <span class="overlay-close" onclick="document.getElementById('shader-overlay').classList.remove('show')">&times;</span>
+    <h3>📂 Shader 库</h3>
+    <div id="shader-grid"></div>
+  </div>
+</div>
+
+<!-- Settings Overlay -->
+<div class="overlay" id="settings-overlay" onclick="if(event.target===this)this.classList.remove('show')">
+  <div class="overlay-card">
+    <span class="overlay-close" onclick="document.getElementById('settings-overlay').classList.remove('show')">&times;</span>
+    <iframe src="/settings.html" style="width:100%;height:60vh;border:none;border-radius:8px"></iframe>
+  </div>
+</div>
+
+<script>
+// ============ State ============
+let currentCode = "", hasGeneratedOnce = false, currentPath = "", loading = false;
+let selectedMusic = null;
+let currentMode = "plan"; // plan | build
+let currentSessionId = null;
+let conversations = [];
+let convLoaded = false;
+let autoReloadingAfterBuild = false;
+const LAST_SESSION_KEY = "musicshader.v2.lastSessionId";
+window.getCurrentMusicShaderSessionId = () => currentSessionId;
+
+// ============ Mode Toggle (Shift+Tab) ============
+function setMode(mode) {
+  currentMode = mode;
+  const el = document.getElementById("mode-indicator");
+  const inp = document.getElementById("chat-input");
+  if (mode === "build") {
+    el.textContent = "🔨 Build";
+    el.style.background = "var(--accent)"; el.style.color = "#fff";
+    inp.placeholder = "描述 Shader 效果...";
+    setStatus("🔨 Build 模式 — 输入需求生成 Shader");
+  } else {
+    el.textContent = "📋 Plan";
+    el.style.background = "transparent"; el.style.color = "var(--accent2)";
+    inp.placeholder = "随意聊聊...";
+    setStatus("📋 Plan 模式 — 对话交流，梳理需求");
+  }
+}
+// ============ Conversation Management ============
+function updateConvTitle(title) {
+  document.getElementById("conv-title").textContent = title;
+}
+function renderConvList() {
+  const list = document.getElementById("conv-list");
+  if (!conversations.length) {
+    list.innerHTML = '<div class="conv-empty">暂无对话</div>';
+    return;
+  }
+  list.innerHTML = conversations.map(c => {
+    const active = c.session_id === currentSessionId ? ' active' : '';
+    const title = c.title || '对话';
+    const time = c.updated_at || '';
+    const pinText = c.pinned ? '取消置顶' : '置顶';
+    return `<div class="conv-item${active}" onclick="switchConversation('${c.session_id}')">
+      <span class="conv-item-title">${escapeHtml(title)}</span>
+      <span class="conv-item-meta">${time}</span>
+      <div class="conv-item-menu-wrap" onclick="event.stopPropagation()">
+        <button class="conv-menu-btn" onclick="toggleConvMenu('${c.session_id}', this)">⋮</button>
+        <div class="conv-menu" id="conv-menu-${c.session_id}">
+          <div class="conv-menu-item" onclick="renameConversation('${c.session_id}')">重命名</div>
+          <div class="conv-menu-item" onclick="pinConversation('${c.session_id}', ${!c.pinned})">${pinText}</div>
+          <div class="conv-menu-item danger" onclick="deleteConversation('${c.session_id}')">删除</div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+async function loadConversations() {
+  try {
+    const r = await fetch("/api/conversations");
+    conversations = await r.json();
+    renderConvList();
+    if (!currentSessionId && conversations.length) {
+      const rememberedSessionId = sessionStorage.getItem(LAST_SESSION_KEY);
+      const remembered = conversations.find(c => c.session_id === rememberedSessionId);
+      await switchConversation((remembered || conversations[0]).session_id);
+    } else if (!currentSessionId) {
+      await newConversation();
+    }
+  } catch(e) {
+    console.error("加载会话列表失败", e);
+  }
+}
+async function newConversation() {
+  hideConvList();
+  try {
+    const r = await fetch("/api/conversations/new", {method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});
+    const d = await r.json();
+    currentSessionId = d.session_id;
+    sessionStorage.setItem(LAST_SESSION_KEY, currentSessionId);
+    if (window.MusicShaderCodeEnhancer) window.MusicShaderCodeEnhancer.onSessionChange(currentSessionId);
+    document.getElementById("chat-messages").innerHTML = "";
+    document.getElementById("code-editor").value = "";
+    currentCode = "";
+    hasGeneratedOnce = false;
+    updateConvTitle("新对话");
+    convLoaded = false;
+    await loadConversations();
+  } catch(e) {
+    console.error("创建会话失败", e);
+  }
+}
+async function switchConversation(sessionId) {
+  hideConvList();
+  if (sessionId === currentSessionId && convLoaded) return;
+  try {
+    const r = await fetch("/api/conversations/switch", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({session_id: sessionId})});
+    const d = await r.json();
+    currentSessionId = d.session_id;
+    sessionStorage.setItem(LAST_SESSION_KEY, currentSessionId);
+    if (window.MusicShaderCodeEnhancer) window.MusicShaderCodeEnhancer.onSessionChange(currentSessionId);
+    // 渲染消息
+    const container = document.getElementById("chat-messages");
+    container.innerHTML = "";
+    if (d.messages && d.messages.length) {
+      for (const m of d.messages) {
+        const isShader = m.content && (m.content.includes("#version") || m.content.includes("void main"));
+        addMessage(m.role, m.content, isShader || m.role === "assistant");
+      }
+    }
+    // 显示欢迎语（仅空对话）
+    if (!d.messages || !d.messages.length) {
+      addMessage("ai","🤖 <b>MusicShader</b> 就绪<br>📋 <b>Plan</b> 模式 = 对话交流<br>🔨 <b>Build</b> 模式 = 生成 Shader<br><br>按 <b>Shift+Tab</b> 切换模式<br>输入 <b>/</b> 快速引用音乐库", true);
+    }
+    convLoaded = true;
+    // 从会话列表查找标题
+    const found = conversations.find(c => c.session_id === sessionId);
+    updateConvTitle(found ? (found.title || "对话") : "对话");
+    // 检查最后一条消息是否为 shader 代码，加载到编辑器
+    hasGeneratedOnce = false;
+    if (d.messages && d.messages.length) {
+      for (let i = d.messages.length - 1; i >= 0; i--) {
+        const m = d.messages[i];
+        if (m.role === "assistant" && m.content && (m.content.includes("#version") || m.content.includes("void main"))) {
+          let cleanCode = m.content.replace(/^\/\/ AI_PIPELINE_HOOK\n\/\/ style_profile: .+\n\/\/ generated_with: .+\n/gm, '').trim();
+          if (cleanCode.includes("#version") || cleanCode.includes("void main")) {
+            currentCode = cleanCode;
+            hasGeneratedOnce = true;
+            document.getElementById("code-editor").value = cleanCode;
+          }
+          break;
+        }
+      }
+    }
+    if (window.MusicShaderCodeEnhancer) window.MusicShaderCodeEnhancer.onSessionChange(currentSessionId, {loadIntoEditor: true});
+    await loadConversations();
+  } catch(e) {
+    console.error("切换会话失败", e);
+  }
+}
+async function deleteCurrentConversation() {
+  if (!currentSessionId) return;
+  if (!confirm("确定删除当前对话？")) return;
+  try {
+    await fetch("/api/conversations/delete", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({session_id: currentSessionId})});
+    document.getElementById("chat-messages").innerHTML = "";
+    currentSessionId = null;
+    convLoaded = false;
+    await loadConversations();
+  } catch(e) {
+    console.error("删除会话失败", e);
+  }
+}
+async function deleteConversation(sessionId) {
+  if (!confirm("确定删除此对话？")) return;
+  try {
+    await fetch("/api/conversations/delete", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({session_id: sessionId})});
+    if (sessionId === currentSessionId) {
+      document.getElementById("chat-messages").innerHTML = "";
+      currentSessionId = null;
+      convLoaded = false;
+    }
+    await loadConversations();
+  } catch(e) {
+    console.error("删除会话失败", e);
+  }
+}
+function toggleConvList() {
+  const dd = document.getElementById("conv-dropdown");
+  dd.classList.toggle("show");
+  if (dd.classList.contains("show")) renderConvList();
+}
+function hideConvList() {
+  document.getElementById("conv-dropdown").classList.remove("show");
+  // 关闭所有菜单
+  document.querySelectorAll(".conv-menu.show").forEach(m => m.classList.remove("show"));
+}
+function toggleConvMenu(sessionId, btn) {
+  const menu = document.getElementById("conv-menu-" + sessionId);
+  const isShow = menu.classList.contains("show");
+  // 先关闭所有其他菜单
+  document.querySelectorAll(".conv-menu.show").forEach(m => m.classList.remove("show"));
+  if (!isShow) menu.classList.add("show");
+}
+async function pinConversation(sessionId, pinned) {
+  try {
+    await fetch("/api/conversations/pin", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({session_id: sessionId, pinned})});
+    await loadConversations();
+  } catch(e) {
+    console.error("置顶失败", e);
+  }
+}
+async function renameConversation(sessionId) {
+  const found = conversations.find(c => c.session_id === sessionId);
+  const oldTitle = found ? (found.title || "对话") : "对话";
+  const newTitle = prompt("输入新对话名称：", oldTitle);
+  if (!newTitle || newTitle.trim() === oldTitle) return;
+  try {
+    hideConvList();
+    await fetch("/api/conversations/rename", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({session_id: sessionId, title: newTitle.trim()})});
+    if (sessionId === currentSessionId) updateConvTitle(newTitle.trim());
+    await loadConversations();
+  } catch(e) {
+    console.error("重命名失败", e);
+  }
+}
+// 全局点击关闭菜单
+document.addEventListener("click", (e) => {
+  if (!e.target.closest(".conv-menu-item") && !e.target.closest(".conv-menu-btn")) {
+    document.querySelectorAll(".conv-menu.show").forEach(m => m.classList.remove("show"));
+  }
+  if (!e.target.closest(".card-menu-item") && !e.target.closest(".card-menu-btn")) {
+    document.querySelectorAll(".card-menu.show").forEach(m => m.classList.remove("show"));
+  }
+});
+function escapeHtml(s) {
+  if (!s) return "";
+  return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+document.addEventListener("keydown", e => {
+  if (e.key === "Tab" && e.shiftKey && !document.getElementById("slash-dropdown").classList.contains("show")) {
+    e.preventDefault();
+    setMode(currentMode === "plan" ? "build" : "plan");
+  }
+});
+
+// ============ Drag Resize (All panels) ============
+(function(){
+  function makeResizable(panelId, resizeId, dim, minPx, maxPx) {
+    const panel = document.getElementById(panelId);
+    const handle = document.getElementById(resizeId);
+    let dragging = false, start = 0, startSize = 0;
+    handle.addEventListener("mousedown", e => {
+      dragging = true; handle.classList.add("dragging");
+      start = dim === "width" ? e.clientX : e.clientY;
+      startSize = dim === "width" ? panel.offsetWidth : panel.offsetHeight;
+      document.body.style.cursor = dim === "width" ? "ew-resize" : "ns-resize";
+      document.body.style.userSelect = "none";
+      e.preventDefault();
+    });
+    document.addEventListener("mousemove", e => {
+      if (!dragging) return;
+      const delta = (dim === "width" ? e.clientX : e.clientY) - start;
+      const newSize = Math.max(minPx, Math.min(maxPx, startSize + delta));
+      panel.style.flex = "none";
+      if (dim === "width") panel.style.width = newSize + "px";
+      else panel.style.height = newSize + "px";
+    });
+    document.addEventListener("mouseup", () => {
+      if (!dragging) return;
+      dragging = false; handle.classList.remove("dragging");
+      document.body.style.cursor = ""; document.body.style.userSelect = "";
+    });
+  }
+  // 左侧聊天面板拖拽
+  makeResizable("chat-panel", "chat-resize", "width", 280, 600);
+  // 右侧音乐库面板拖拽
+  makeResizable("music-panel", "music-resize", "width", 160, 400);
+  // 代码编辑器高度拖拽
+  makeResizable("code-section", "drag-handle", "height", 60, 9999);
+})();
+
+// ============ Markdown Render ============
+function renderMd(text) {
+  let t = text.replace(/\n{3,}/g, '\n\n').trim();
+  // Split into blocks (by double newline)
+  let blocks = t.split(/\n\n+/);
+  return blocks.map(block => {
+    let lines = block.split('\n');
+    let first = lines[0].trim();
+
+    // Horizontal rule
+    if (/^---+$/.test(first)) return '<hr>';
+    // Headers
+    if (/^### /.test(first)) return `<h4>${first.slice(4)}</h4>`;
+    if (/^## /.test(first)) return `<h3>${first.slice(3)}</h3>`;
+    if (/^# /.test(first)) return `<h2>${first.slice(2)}</h2>`;
+    // Blockquote
+    if (/^> /.test(first)) return `<blockquote>${lines.map(l => l.replace(/^> ?/, '')).join('<br>')}</blockquote>`;
+
+    // Table: all lines start with |
+    if (first.startsWith('|') && lines.length >= 2) {
+      let rows = lines.filter(l => l.includes('|') && !l.includes('---')).map(row =>
+        '<tr>' + row.split('|').slice(1, -1).map(c => `<td>${c.trim()}</td>`).join('') + '</tr>'
+      );
+      return `<table>${rows.join('')}</table>`;
+    }
+
+    // Inline formatting within paragraph
+    let html = block
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      .replace(/```(\w*)\n?([\s\S]*?)```/g, '<pre><code>$2</code></pre>')
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
+      .replace(/\*\*\*(.+?)\*\*\*/g, '<b><i>$1</i></b>')
+      .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+      .replace(/\*(.+?)\*/g, '<i>$1</i>')
+      .replace(/\n/g, '<br>');
+
+    // List detection
+    let listItems = html.split('<br>').filter(l => /^\d+\.\s/.test(l.trim()) || /^-\s/.test(l.trim()));
+    if (listItems.length >= 2) {
+      let items = html.split('<br>').map(l => {
+        let trimmed = l.trim();
+        if (/^\d+\.\s/.test(trimmed)) return `<li>${trimmed.replace(/^\d+\.\s*/, '')}</li>`;
+        if (/^-\s/.test(trimmed)) return `<li>${trimmed.replace(/^-\s*/, '')}</li>`;
+        return l;
+      }).join('');
+      return `<ul>${items}</ul>`;
+    }
+
+    return `<p>${html}</p>`;
+  }).join('');
+}
+
+// ============ Chat ============
+function refreshCodeTools(root) {
+  if (window.MusicShaderCodeEnhancer) {
+    window.MusicShaderCodeEnhancer.refresh(root || document.getElementById("chat-messages"));
+  }
+}
+function addMessage(role, text, html) {
+  const el = document.createElement("div");
+  el.className = "msg " + role;
+  const content = html ? text : renderMd(text);
+  el.innerHTML = `<div class="avatar">${role==="user"?"😎":"AI"}</div><div class="bubble">${content}</div>`;
+  document.getElementById("chat-messages").appendChild(el);
+  refreshCodeTools(el);
+  el.scrollIntoView({behavior:"smooth"});
+  return el;
+}
+async function sendMessage() {
+  const input = document.getElementById("chat-input");
+  const prompt = input.value.trim();
+  if (!prompt || loading) return;
+  input.value = ""; input.style.height = "auto"; addMessage("user", prompt);
+  loading = true; document.getElementById("send-btn").disabled = true;
+
+  if (currentMode === "build") {
+    await doAnalyze(prompt);
+  } else {
+    await doChatStream(prompt);
+  }
+}
+
+// ---- SSE stream helper ----
+async function streamSSE(url, body, onChunk, onDone) {
+  try {
+    const r = await fetch(url, {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+    if (!r.ok) { onDone("❌ HTTP " + r.status); return; }
+    const reader = r.body.getReader();
+    const decoder = new TextDecoder();
+    let fullText = "";
+    let pending = "";
+    while (true) {
+      const {done, value} = await reader.read();
+      pending += done ? decoder.decode() : decoder.decode(value, {stream: true});
+      const lines = pending.split(/\r?\n/);
+      pending = done ? "" : lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        const payload = line.slice(6);
+        if (payload === "[DONE]") { onDone(null, fullText); return; }
+        try {
+          const d = JSON.parse(payload);
+          if (d.error) { onDone("❌ " + d.error); return; }
+          if (d.session_id) {
+            currentSessionId = d.session_id;
+            sessionStorage.setItem(LAST_SESSION_KEY, currentSessionId);
+            continue;
+          }
+          fullText += d.chunk;
+          // 去掉 initial heartbeat "."
+          if (fullText === ".") { fullText = ""; }
+          else if (fullText.startsWith(".") && d.chunk.length <= 2) { fullText = fullText.slice(1); }
+          onChunk(fullText, d);
+        } catch(e) {}
+      }
+      if (done) break;
+    }
+    onDone(null, fullText);
+  } catch(e) { onDone("❌ 网络错误"); }
+}
+
+// ---- Plan / legacy chat ----
+async function doChatStream(prompt) {
+  setStatus("⏳ ...");
+  const msgEl = document.createElement("div"); msgEl.className = "msg ai";
+  msgEl.innerHTML = `<div class="avatar">AI</div><div class="bubble"></div>`;
+  document.getElementById("chat-messages").appendChild(msgEl);
+  const bubbleEl = msgEl.querySelector(".bubble");
+
+  await streamSSE("/api/chat/stream", {prompt, adjust:hasGeneratedOnce, mode:currentMode, session_id:currentSessionId},
+    (fullText) => { bubbleEl.innerHTML = renderMd(fullText); refreshCodeTools(msgEl); msgEl.scrollIntoView({behavior:"smooth"}); },
+    (err, fullText) => {
+      loading = false; document.getElementById("send-btn").disabled = false;
+      if (err) { bubbleEl.innerHTML = renderMd(err); refreshCodeTools(msgEl); setStatus("就绪"); return; }
+      // 检测分析结果 → 显示「切换并生成」按钮
+      if (fullText && (fullText.includes("推荐风格") || fullText.includes("确认生成") || fullText.includes("估算时长") || fullText.includes("采样点数"))) {
+        const btnRow = document.createElement("div");
+        btnRow.className = "analysis-actions";
+        btnRow.innerHTML = `<button class="btn-confirm" onclick="switchToBuild('${escapeJs(prompt)}','${escapeJs(fullText)}')">🔨 切换到 Build 生成</button>`;
+        msgEl.querySelector(".bubble").appendChild(btnRow);
+        refreshCodeTools(msgEl);
+        msgEl.scrollIntoView({behavior:"smooth"});
+        setStatus("📋 分析完成 — 点击按钮生成 Shader");
+      } else {
+        applyShaderResult(fullText);
+      }
+    }
+  );
+}
+
+function switchToBuild(prompt, analysisText) {
+  setMode("build");
+  document.querySelectorAll(".analysis-actions").forEach(e => e.remove());
+  doBuild(prompt, analysisText);
+}
+
+// ---- Build: Analyze phase ----
+async function doAnalyze(prompt) {
+  setStatus("🔍 分析中...");
+  const msgEl = document.createElement("div"); msgEl.className = "msg ai";
+  msgEl.innerHTML = `<div class="avatar">AI</div><div class="bubble"></div>`;
+  document.getElementById("chat-messages").appendChild(msgEl);
+  const bubbleEl = msgEl.querySelector(".bubble");
+
+  await streamSSE("/api/chat/analyze", {prompt, mode:"build", session_id:currentSessionId},
+    (fullText) => { bubbleEl.innerHTML = renderMd(fullText); refreshCodeTools(msgEl); msgEl.scrollIntoView({behavior:"smooth"}); },
+    (err, analysisText) => {
+      loading = false; document.getElementById("send-btn").disabled = false;
+      if (err) { bubbleEl.innerHTML = renderMd(err); refreshCodeTools(msgEl); setStatus("就绪"); return; }
+      // 在气泡下方加确认按钮
+      const btnRow = document.createElement("div");
+      btnRow.className = "analysis-actions";
+      btnRow.innerHTML = `<button class="btn-confirm" onclick="doBuild('${escapeJs(prompt)}','${escapeJs(analysisText)}')">确认生成</button><button class="btn-modify" onclick="doModify('${escapeJs(prompt)}')">修改描述</button>`;
+      msgEl.querySelector(".bubble").appendChild(btnRow);
+      refreshCodeTools(msgEl);
+      msgEl.scrollIntoView({behavior:"smooth"});
+      setStatus("📋 分析完成 — 请确认或修改");
+    }
+  );
+}
+
+// ---- Build: Code generation phase ----
+async function doBuild(prompt, analysisContext) {
+  loading = true; document.getElementById("send-btn").disabled = true;
+  setStatus("🔨 生成中...");
+  // 移除旧的确认按钮
+  document.querySelectorAll(".analysis-actions").forEach(e => e.remove());
+
+  const msgEl = document.createElement("div"); msgEl.className = "msg ai";
+  msgEl.innerHTML = `<div class="avatar">AI</div><div class="bubble"></div>`;
+  document.getElementById("chat-messages").appendChild(msgEl);
+  const bubbleEl = msgEl.querySelector(".bubble");
+
+  await streamSSE("/api/chat/build", {prompt, analysis_context:analysisContext, mode:"build", session_id:currentSessionId},
+    (fullText) => { bubbleEl.innerHTML = renderMd(fullText); refreshCodeTools(msgEl); msgEl.scrollIntoView({behavior:"smooth"}); },
+    (err, fullText) => {
+      loading = false; document.getElementById("send-btn").disabled = false;
+      if (err) { bubbleEl.innerHTML = renderMd(err); refreshCodeTools(msgEl); setStatus("就绪"); return; }
+      refreshCodeTools(msgEl);
+      applyShaderResult(fullText);
+    }
+  );
+}
+
+function doModify(prompt) {
+  const inp = document.getElementById("chat-input");
+  inp.value = prompt; inp.focus(); inp.style.height = "auto";
+  inp.style.height = Math.min(inp.scrollHeight, 120) + "px";
+  setStatus("📝 请修改需求后重新发送");
+}
+
+function applyShaderResult(fullText) {
+  let cleanCode = extractShaderCode(fullText)
+    .replace(/^\/\/ AI_PIPELINE_HOOK\n\/\/ style_profile: .+\n\/\/ generated_with: .+\n/gm, '')
+    .replace(/^\/\/ compiled: .+\n/gm, '').trim();
+  const verIdx = cleanCode.indexOf('\n#version');
+  if (verIdx > 0 && verIdx < 200) cleanCode = cleanCode.slice(verIdx + 1);
+  const isShader = cleanCode.includes("void main") || cleanCode.startsWith("#version");
+  const isError = fullText.includes("Error code:") || fullText.includes("Recursion limit");
+  if (isShader) {
+    currentCode = cleanCode; hasGeneratedOnce = true;
+    document.getElementById("code-editor").value = cleanCode;
+    setStatus("✅ Shader 生成完成"); startPreview();
+    scheduleReloadAfterBuild();
+  } else if (isError) {
+    setStatus("❌ 生成失败");
+  } else if (fullText.trim()) {
+    setStatus("就绪");
+  }
+}
+
+function scheduleReloadAfterBuild() {
+  if (autoReloadingAfterBuild) return;
+  autoReloadingAfterBuild = true;
+  if (currentSessionId) sessionStorage.setItem(LAST_SESSION_KEY, currentSessionId);
+  setStatus("✅ Shader 生成完成，正在刷新聊天代码块...");
+  setTimeout(() => window.location.reload(), 700);
+}
+
+function extractShaderCode(text) {
+  const fenced = text.match(/```(?:glsl)?\s*([\s\S]*?)```/i);
+  if (fenced) return fenced[1].trim();
+
+  const versionIdx = text.indexOf("#version");
+  if (versionIdx >= 0) return text.slice(versionIdx).trim();
+
+  const mainIdx = text.search(/(?:void\s+mainImage|void\s+main)\s*\(/);
+  if (mainIdx >= 0) {
+    const prefix = [
+      "#version 330",
+      "uniform vec3 iResolution;",
+      "uniform float iTime;",
+      "out vec4 fragColor;",
+      "",
+    ].join("\n");
+    return prefix + text.slice(mainIdx).trim();
+  }
+
+  return text.trim();
+}
+
+function escapeJs(s) { return s.replace(/\\/g,"\\\\").replace(/'/g,"\\'").replace(/"/g,"&quot;").replace(/\n/g,"\\n"); }
+
+// ---- Old code removed; new flow above handles everything ----
+// ============ Shader Lib ============
+async function showShaderLib() {
+  const ov = document.getElementById("shader-overlay");
+  ov.classList.add("show");
+  const grid = document.getElementById("shader-grid");
+  grid.innerHTML = '<div class="spinner"></div>';
+  const r = await fetch("/api/shaders");
+  const files = await r.json();
+  grid.innerHTML = files.length ? files.map(f => `<div class="shader-card" onclick="loadShader('${escapeJs(f.path)}','${escapeJs(f.name)}')">
+    <div class="card-name">🎨 ${escapeHtml(f.name)}</div>
+    <div class="card-info">${fmtSize(f.size)} · ${f.modified}</div>
+    <div class="card-menu-wrap" onclick="event.stopPropagation()">
+      <button class="card-menu-btn" onclick="toggleShaderMenu('${escapeJs(f.path)}', this)">⋮</button>
+      <div class="card-menu" id="shader-menu-${f.path.replace(/[^a-zA-Z0-9]/g,'_')}">
+        <div class="card-menu-item" onclick="renameShader('${escapeJs(f.path)}','${escapeJs(f.name)}')">重命名</div>
+        <div class="card-menu-item danger" onclick="deleteShader('${escapeJs(f.path)}','${escapeJs(f.name)}')">删除</div>
+      </div>
+    </div>
+  </div>`).join("") : '<div style="color:var(--text2);padding:20px;text-align:center">暂无 Shader</div>';
+}
+async function loadShader(path, name) {
+  const r = await fetch("/api/shader?path="+encodeURIComponent(path));
+  const d = await r.json();
+  if (d.code) { currentCode=d.code;currentPath=path;document.getElementById("code-editor").value=d.code; document.getElementById("shader-overlay").classList.remove("show"); setStatus("加载: "+name); }
+  else setStatus("❌ "+d.error);
+}
+function toggleShaderMenu(path, btn) {
+  const id = 'shader-menu-' + path.replace(/[^a-zA-Z0-9]/g, '_');
+  const menu = document.getElementById(id);
+  if (!menu) return;
+  const isShow = menu.classList.contains("show");
+  document.querySelectorAll(".card-menu.show").forEach(m => m.classList.remove("show"));
+  if (!isShow) menu.classList.add("show");
+}
+async function renameShader(path, oldName) {
+  const newName = prompt("输入新名称（不含扩展名）：", oldName.replace(/\.glsl$/i, ""));
+  if (!newName || newName.trim() === oldName.replace(/\.glsl$/i, "")) return;
+  closeShaderMenus();
+  try {
+    const r = await fetch("/api/shader/rename", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path, name: newName.trim()})});
+    const d = await r.json();
+    if (d.ok) { showShaderLib(); setStatus("✅ 已重命名为: " + newName.trim() + ".glsl"); }
+    else setStatus("❌ " + (d.error || "重命名失败"));
+  } catch(e) { setStatus("❌ 重命名失败"); }
+}
+async function deleteShader(path, name) {
+  if (!confirm("确定删除「" + name + "」？")) return;
+  closeShaderMenus();
+  try {
+    const r = await fetch("/api/shader/delete", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path})});
+    const d = await r.json();
+    if (d.ok) { showShaderLib(); setStatus("🗑️ 已删除: " + name); }
+    else setStatus("❌ " + (d.error || "删除失败"));
+  } catch(e) { setStatus("❌ 删除失败"); }
+}
+function closeShaderMenus() {
+  document.querySelectorAll(".card-menu.show").forEach(m => m.classList.remove("show"));
+}
+
+// ============ Music Library ============
+const AUDIO_SUFFIXES = [".wav",".mp3",".flac",".ogg",".aac",".m4a",".wma",".aiff",".opus"];
+async function loadMusic() {
+  const list = document.getElementById("music-list");
+  list.innerHTML = '<div class="spinner" style="margin:12px"></div>';
+  const r = await fetch("/api/music");
+  const files = await r.json();
+  const audioFiles = files.filter(f => AUDIO_SUFFIXES.includes(f.suffix));
+  document.getElementById("music-count").textContent = audioFiles.length;
+  const icons = {".wav":"🎵",".mp3":"🎧",".flac":"🎼",".ogg":"🎶",".aac":"🎹",".m4a":"🎵",".wma":"📻",".aiff":"🎵",".opus":"🎶"};
+  list.innerHTML = audioFiles.length ? audioFiles.map(f => `<div class="music-item${selectedMusic&&selectedMusic.path===f.path?' selected':''}" onclick="selectMusic('${f.path}','${f.name}')">
+    <span class="icon">${icons[f.suffix]||"🎵"}</span>
+    <span class="name">${f.name}</span>
+    <span class="ext">${f.suffix}</span>
+  </div>`).join("") : '<div style="color:var(--text2);padding:12px 14px;font-size:12px">暂无音频文件<br><small>将 .mp3/.wav 等放入 music/ 目录</small></div>';
+}
+function selectMusic(path, name) {
+  selectedMusic = selectedMusic && selectedMusic.path === path ? null : {path, name};
+  loadMusic();
+  if (selectedMusic) {
+    const ref = `[音乐: ${selectedMusic.path}]`;
+    const inp = document.getElementById("chat-input");
+    if (!inp.value.includes(ref)) inp.value = inp.value ? inp.value+" "+ref : ref;
+    setStatus("已选中: "+name);
+  } else setStatus("已取消");
+}
+
+// ============ WebGL Preview ============
+let gl=null, glProgram=null, glAnimId=null, glStartTime=0;
+const VERTEX_SRC = `#version 300 es
+precision highp float;
+in vec2 aPos;
+out vec2 vUv;
+void main(){vUv=aPos*0.5+0.5;gl_Position=vec4(aPos,0.,1.);}`;
+
+function initGL() {
+  const canvas = document.getElementById("gl-canvas");
+  gl = canvas.getContext("webgl2", {alpha:false}) || canvas.getContext("webgl", {alpha:false});
+  if (!gl) return false;
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,1,-1,-1,1,1,1]), gl.STATIC_DRAW);
+  const vs = gl.createShader(gl.VERTEX_SHADER);
+  gl.shaderSource(vs, VERTEX_SRC); gl.compileShader(vs);
+  return !!gl.getShaderParameter(vs, gl.COMPILE_STATUS);
+}
+function compileFragment(src) {
+  if (!gl) return null;
+  let code = src;
+  code = code.replace(/#ifdef\s+GL_ES\b[^\n]*\n([\s\S]*?)#endif/g, (_,body) => body);
+  code = code.replace(/#ifndef\s+GL_ES\b[^\n]*\n([\s\S]*?)#endif/g, (_,body) => body);
+  let lines = code.split('\n');
+  while (lines.length > 0) {
+    let t = lines[0].trim();
+    if (t === '' || t.startsWith('//') || t.startsWith('/*') || t.startsWith('*')) lines.shift();
+    else break;
+  }
+  code = lines.join('\n');
+  if (/^#version\s+330/m.test(code)) code = code.replace(/^#version\s+330/m, '#version 300 es');
+  else if (code.includes('#version')) code = code.replace(/^#version\s+(\S+)/m, '#version $1');
+  if (!code.trimStart().startsWith('#version')) code = '#version 300 es\nprecision mediump float;\n' + code;
+  if (!code.includes('precision')) code = code.replace(/^#version 300 es/m, '#version 300 es\nprecision mediump float;');
+  if (code.includes("gl_FragColor") && !code.includes("out vec4")) code = code.replace(/void\s+mainImage/, "out vec4 fragColor;\nvoid mainImage");
+  code = code.replace(/\bgl_FragColor\b/g, "fragColor");
+  const fs = gl.createShader(gl.FRAGMENT_SHADER);
+  gl.shaderSource(fs, code); gl.compileShader(fs);
+  if (!gl.getShaderParameter(fs, gl.COMPILE_STATUS)) return gl.getShaderInfoLog(fs);
+  if (glProgram) gl.deleteProgram(glProgram);
+  glProgram = gl.createProgram();
+  const vvs = gl.createShader(gl.VERTEX_SHADER); gl.shaderSource(vvs,VERTEX_SRC); gl.compileShader(vvs);
+  if (!gl.getShaderParameter(vvs, gl.COMPILE_STATUS)) return 'Vertex shader: ' + gl.getShaderInfoLog(vvs);
+  gl.attachShader(glProgram, vvs); gl.attachShader(glProgram, fs);
+  gl.linkProgram(glProgram);
+  if (!gl.getProgramParameter(glProgram, gl.LINK_STATUS)) return gl.getProgramInfoLog(glProgram);
+  gl.useProgram(glProgram);
+  const aPos = gl.getAttribLocation(glProgram, "aPos");
+  const buf2 = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf2);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,1,-1,-1,1,1,1]), gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(aPos);
+  gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+  const tex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  const noise = new Uint8Array(512*2*4);
+  for (let i=0;i<512*2;i++) { const v=Math.random()*255; noise[i*4]=v;noise[i*4+1]=v;noise[i*4+2]=v;noise[i*4+3]=255; }
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,512,2,0,gl.RGBA,gl.UNSIGNED_BYTE,noise);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+  glStartTime = performance.now()/1000;
+  return null;
+}
+function renderGL() {
+  if (!gl || !glProgram) return;
+  const canvas = gl.canvas;
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  if (canvas.width!==w||canvas.height!==h) { canvas.width=w; canvas.height=h; gl.viewport(0,0,w,h); }
+  const iTime = gl.getUniformLocation(glProgram, "iTime");
+  const iRes = gl.getUniformLocation(glProgram, "iResolution");
+  if (iTime) gl.uniform1f(iTime, performance.now()/1000 - glStartTime);
+  if (iRes) gl.uniform3f(iRes, w, h, 0);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+}
+function startPreview() {
+  const el = document.getElementById("preview-error");
+  el.style.display = "none";
+  if (!initGL()) { el.style.display="block";el.textContent="WebGL 不可用"; return; }
+  const code = document.getElementById("code-editor").value.trim();
+  if (!code) { el.style.display="block";el.textContent="请先生成或加载 Shader 代码"; return; }
+  const err = compileFragment(code);
+  if (err) { el.style.display="block";el.textContent="编译错误: "+err; return; }
+  document.getElementById("preview-overlay").innerHTML = '<span class="tag">WebGL 实时渲染</span>';
+  if (glAnimId) cancelAnimationFrame(glAnimId);
+  function loop() { renderGL(); glAnimId = requestAnimationFrame(loop); }
+  loop();
+}
+
+// ============ Apply / Save / Deploy ============
+function applyShader() {
+  const code = document.getElementById("code-editor").value.trim();
+  if (!code) { setStatus("无代码"); return; }
+  currentCode = code; setStatus("已应用"); startPreview();
+}
+async function saveShader() {
+  const code = document.getElementById("code-editor").value.trim();
+  if (!code) { setStatus("无代码"); return; }
+  const name = prompt("文件名（不含 .glsl）:",""); if (!name) return;
+  const r = await fetch("/api/shader",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({code,name})});
+  const d = await r.json();
+  setStatus(d.ok ? "已保存: "+d.path : "❌ "+d.error);
+}
+async function deployShader() {
+  const code = document.getElementById("code-editor").value.trim();
+  if (!code) { setStatus("无代码"); return; }
+  setStatus("启动中...");
+  const r = await fetch("/api/launch",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({code,path:currentPath})});
+  const d = await r.json();
+  setStatus(d.ok ? "OpenGL 窗口已启动" : "❌ "+d.error);
+}
+
+// ============ Voice Input ============
+let isRecording = false;
+async function toggleRecording() {
+  const btn = document.getElementById("mic-btn");
+  if (isRecording) {
+    btn.classList.remove("recording"); btn.textContent = "🎤";
+    isRecording = false; setStatus("转录中...");
+    try {
+      const r = await fetch("/api/speech/stop", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({language:"zh"})});
+      const d = await r.json();
+      if (d.ok && d.text) { document.getElementById("chat-input").value = d.text; setStatus("转录完成"); }
+      else setStatus("❌ " + (d.error || "转录失败"));
+    } catch(e) { setStatus("❌ 网络错误"); isRecording = false; }
+  } else {
+    try {
+      const r = await fetch("/api/speech/start", {method:"POST"});
+      const d = await r.json();
+      if (d.ok) { btn.classList.add("recording"); btn.textContent = "⏹"; isRecording = true; setStatus("录音中... 再次点击停止"); }
+      else setStatus("❌ " + (d.error || "无法启动录音"));
+    } catch(e) { setStatus("❌ 录音服务未就绪"); }
+  }
+}
+
+// ============ Slash Autocomplete ============
+let musicCache = [], slashIdx = -1, slashQuery = "";
+async function loadMusicCache() {
+  try { const r = await fetch("/api/music"); musicCache = await r.json(); } catch(e) {}
+}
+const AUTO_SUFFIXES = [".wav",".mp3",".flac",".ogg",".aac",".m4a",".wma",".aiff",".opus"];
+const chatInput = document.getElementById("chat-input");
+// Auto-grow
+chatInput.addEventListener("input", e => {
+  const t = e.target;
+  t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, 120) + "px";
+  // Slash autocomplete
+  const val = t.value, pos = t.selectionStart;
+  const slashPos = val.lastIndexOf("/", pos - 1);
+  if (slashPos < 0 || pos <= slashPos) { hideSlash(); return; }
+  const q = val.slice(slashPos + 1, pos).toLowerCase();
+  slashQuery = q;
+  const matches = musicCache.filter(f => AUTO_SUFFIXES.includes(f.suffix) && (f.name.toLowerCase().includes(q) || f.path.toLowerCase().includes(q)));
+  if (!matches.length) { hideSlash(); return; }
+  slashIdx = -1;
+  const dd = document.getElementById("slash-dropdown");
+  const icons = {".wav":"🎵",".mp3":"🎧",".flac":"🎼",".ogg":"🎶",".aac":"🎹",".m4a":"🎵",".wma":"📻",".aiff":"🎵",".opus":"🎶"};
+  dd.innerHTML = matches.map((f,i) => `<div class="slash-item" data-idx="${i}"><span class="si-icon">${icons[f.suffix]||"🎵"}</span><span class="si-name">${f.name}</span><span class="si-hint">${f.path}</span></div>`).join("");
+  dd.classList.add("show");
+  dd.querySelectorAll(".slash-item").forEach(el => el.addEventListener("click", () => applySlash(matches[parseInt(el.dataset.idx)])));
+});
+document.addEventListener("click", e => {
+  if (!e.target.closest("#slash-dropdown") && !e.target.closest("#chat-input")) hideSlash();
+});
+chatInput.addEventListener("keydown", e => {
+  const dd = document.getElementById("slash-dropdown");
+  if (dd.classList.contains("show")) {
+    const items = dd.querySelectorAll(".slash-item");
+    if (e.key === "ArrowDown") { e.preventDefault(); slashIdx = Math.min(slashIdx + 1, items.length - 1); updateSlashActive(items); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); slashIdx = Math.max(slashIdx - 1, 0); updateSlashActive(items); }
+    else if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (slashIdx >= 0) items[slashIdx]?.click(); else hideSlash(); }
+    else if (e.key === "Escape") { e.preventDefault(); hideSlash(); }
+    else if (e.key === "Tab") { e.preventDefault(); slashIdx = Math.max(slashIdx, 0); updateSlashActive(items); }
+    return;
+  }
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+});
+function updateSlashActive(items) { items.forEach((el,i) => el.classList.toggle("active", i === slashIdx)); }
+function hideSlash() { document.getElementById("slash-dropdown").classList.remove("show"); slashIdx = -1; }
+function applySlash(file) {
+  const inp = document.getElementById("chat-input"), val = inp.value, pos = inp.selectionStart;
+  const slashPos = val.lastIndexOf("/", pos - 1);
+  const prefix = val.slice(0, slashPos);
+  const suffix = val.slice(pos);
+  inp.value = prefix + "/" + file.path + " " + suffix;
+  hideSlash(); inp.focus();
+}
+// ============ Utils ============
+function setStatus(msg) { document.getElementById("status-bar").textContent = msg; }
+function fmtSize(b) { return b<1024?b+"B":b<1048576?(b/1024).toFixed(1)+"KB":(b/1048576).toFixed(1)+"MB"; }
+
+// ============ Init ============
+(async ()=>{
+  await loadConversations();
+  loadMusicCache(); loadMusic();
+})();
+</script>
+<script src="./static/code-blocks.js?v=20260610_stable_scrollbar"></script>
+</body>
+</html>

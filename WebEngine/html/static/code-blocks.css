@@ -1,0 +1,204 @@
+.ms-code-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  border: 1px solid var(--border, #2d2a4a);
+  border-bottom: 0;
+  border-radius: 8px 8px 0 0;
+  background: rgba(15, 14, 23, 0.92);
+  padding: 6px 8px;
+  margin-top: 8px;
+}
+
+.ms-code-title {
+  min-width: 0;
+  flex: 1 1 120px;
+  overflow: hidden;
+  color: var(--text2, #94a1b2);
+  font-size: 11px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ms-code-actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.ms-code-actions button,
+.ms-editor-actions button {
+  border: 1px solid var(--border, #2d2a4a);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text2, #94a1b2);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 7px;
+  transition: all 0.15s;
+}
+
+.ms-code-actions button:hover,
+.ms-editor-actions button:hover {
+  border-color: var(--accent, #7f5af0);
+  color: var(--text, #fffffe);
+}
+
+.ms-code-actions button.ms-active,
+.ms-editor-actions button.ms-active {
+  border-color: var(--accent2, #2cb67d);
+  background: rgba(44, 182, 125, 0.18);
+  color: var(--accent2, #2cb67d);
+}
+
+.ms-code-card {
+  margin: 8px 0;
+  cursor: pointer;
+  width: 100%;
+}
+
+.ms-code-card pre {
+  border: 1px solid var(--border, #2d2a4a);
+  border-radius: 0 0 8px 8px !important;
+  margin-top: 0 !important;
+  max-height: none;
+  overflow-x: auto !important;
+  overflow-y: visible !important;
+  scrollbar-gutter: stable;
+  white-space: pre-wrap;
+  word-break: break-word;
+  width: 100%;
+}
+
+.ms-code-card.ms-collapsed pre {
+  max-height: 220px;
+  overflow: hidden !important;
+}
+
+.ms-code-card.ms-collapsed {
+  position: relative;
+}
+
+.ms-code-card.ms-collapsed::before {
+  content: "";
+  position: absolute;
+  left: 1px;
+  right: 1px;
+  bottom: 1px;
+  height: 64px;
+  border-radius: 0 0 8px 8px;
+  background: linear-gradient(to bottom, rgba(15, 14, 23, 0), rgba(15, 14, 23, 0.96) 72%);
+  pointer-events: none;
+  z-index: 1;
+}
+
+
+.ms-code-card.ms-default {
+  position: relative;
+  border-radius: 8px;
+  box-shadow: 0 0 0 2px rgba(44, 182, 125, 0.25);
+}
+
+.ms-code-card.ms-default::after {
+  content: "本会话默认";
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  border-radius: 999px;
+  background: rgba(44, 182, 125, 0.18);
+  color: var(--accent2, #2cb67d);
+  font-size: 10px;
+  font-weight: 800;
+  padding: 3px 7px;
+  pointer-events: none;
+}
+
+.ms-editor-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.ms-default-summary {
+  color: var(--accent2, #2cb67d);
+  font-size: 11px;
+  margin-left: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.code-card {
+  overflow: hidden;
+  border: 1px solid var(--code-border);
+  border-radius: 8px;
+  background: var(--code-bg);
+}
+
+.code-card.is-default {
+  border-color: var(--success);
+  box-shadow: 0 0 0 2px rgba(22, 163, 74, 0.22);
+}
+
+.code-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 1px solid var(--code-border);
+  padding: 8px;
+}
+
+.code-title {
+  min-width: 0;
+  overflow: hidden;
+  color: #cbd5e1;
+  font-size: 12px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.code-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
+}
+
+.code-actions button {
+  border-radius: 6px;
+  padding: 5px 8px;
+  background: #1e293b;
+  color: #e2e8f0;
+  font-size: 12px;
+}
+
+.code-actions button:hover {
+  background: #334155;
+}
+
+.code-actions button.is-active {
+  background: var(--success);
+  color: #fff;
+}
+
+.code-content {
+  max-height: 320px;
+  margin: 0;
+  overflow: auto;
+  padding: 12px;
+  color: var(--code-text);
+  font-family: Consolas, "Cascadia Code", Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre;
+}
+
+.code-card.is-collapsed .code-content {
+  max-height: 72px;
+}
