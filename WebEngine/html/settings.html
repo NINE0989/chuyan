@@ -138,6 +138,26 @@ button:focus-visible,input:focus-visible { outline: 2px solid rgba(96,165,250,.8
         </div>
     </div>
 
+    <!-- Speech API -->
+    <div class="card">
+        <div class="card-title">语音识别配置</div>
+        <div class="form-group">
+            <label>Speech API Key（OpenAI / Whisper 兼容，不支持 DeepSeek）</label>
+            <div class="input-row">
+                <input type="password" id="speech_api_key" placeholder="sk-..." autocomplete="off">
+                <button class="btn-icon" onclick="toggleKey('speech_api_key')">👁</button>
+            </div>
+        </div>
+        <div class="form-group">
+            <label>Speech Base URL</label>
+            <input type="text" id="speech_base_url" placeholder="https://api.openai.com/v1">
+        </div>
+        <div class="form-group">
+            <label>Speech Model</label>
+            <input type="text" id="speech_model" placeholder="whisper-1">
+        </div>
+    </div>
+
     <button class="btn-save" onclick="save()">💾 保存配置</button>
     <div class="status" id="status"></div>
     <div class="footer">MusicShader · 配置保存到 settings.json</div>
@@ -160,8 +180,8 @@ function selectPreset(name) {
     }
 }
 
-function toggleKey() {
-    const el = document.getElementById("api_key");
+function toggleKey(id = "api_key") {
+    const el = document.getElementById(id);
     el.type = el.type === "password" ? "text" : "password";
 }
 
@@ -172,6 +192,9 @@ async function load() {
         if (d.api_key) document.getElementById("api_key").value = d.api_key;
         if (d.base_url) document.getElementById("base_url").value = d.base_url;
         if (d.model) document.getElementById("model").value = d.model;
+        if (d.speech_api_key) document.getElementById("speech_api_key").value = d.speech_api_key;
+        document.getElementById("speech_base_url").value = d.speech_base_url || "https://api.openai.com/v1";
+        document.getElementById("speech_model").value = d.speech_model || "whisper-1";
         // 推断预设
         if (d.base_url === presets.openai.base_url && d.model === presets.openai.model) selectPreset("openai");
         else if (d.base_url === presets.deepseek.base_url && d.model === presets.deepseek.model) selectPreset("deepseek");
@@ -187,9 +210,14 @@ async function save() {
         api_key: document.getElementById("api_key").value.trim(),
         base_url: document.getElementById("base_url").value.trim(),
         model: document.getElementById("model").value.trim(),
+        speech_api_key: document.getElementById("speech_api_key").value.trim(),
+        speech_base_url: document.getElementById("speech_base_url").value.trim(),
+        speech_model: document.getElementById("speech_model").value.trim(),
     };
     if (!data.base_url) { setStatus("Base URL 不能为空", "error"); return; }
     if (!data.model) { setStatus("Model 不能为空", "error"); return; }
+    if (!data.speech_base_url) { setStatus("Speech Base URL 不能为空", "error"); return; }
+    if (!data.speech_model) { setStatus("Speech Model 不能为空", "error"); return; }
     try {
         const r = await fetch("/api/settings", {
             method: "POST",

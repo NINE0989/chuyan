@@ -44,11 +44,27 @@ class SpeechService:
         try:
             from WebEngine.settings import get_settings
             s = get_settings()
-            self._api_key = (s and s.api_key) or os.getenv("OPENAI_API_KEY", "").strip()
-            self._base_url = (s and s.base_url) or os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1").rstrip("/")
+            chat_base_url = (s and s.base_url or "").rstrip("/")
+            can_reuse_chat_key = "api.openai.com" in chat_base_url
+            self._api_key = (
+                (s and s.speech_api_key)
+                or os.getenv("OPENAI_SPEECH_API_KEY", "").strip()
+                or ((s and s.api_key) if can_reuse_chat_key else "")
+            )
+            self._base_url = (
+                (s and s.speech_base_url)
+                or os.getenv("OPENAI_SPEECH_BASE_URL", "")
+                or "https://api.openai.com/v1"
+            ).rstrip("/")
+            self._model = (
+                (s and s.speech_model)
+                or os.getenv("OPENAI_SPEECH_MODEL", "")
+                or "whisper-1"
+            )
         except Exception:
-            self._api_key = os.getenv("OPENAI_API_KEY", "").strip()
-            self._base_url = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1").rstrip("/")
+            self._api_key = os.getenv("OPENAI_SPEECH_API_KEY", "").strip()
+            self._base_url = os.getenv("OPENAI_SPEECH_BASE_URL", "https://api.openai.com/v1").rstrip("/")
+            self._model = os.getenv("OPENAI_SPEECH_MODEL", "whisper-1")
 
     @property
     def is_recording(self) -> bool:
@@ -167,7 +183,7 @@ class SpeechService:
         if not wav_bytes:
             return TranscriptionResult(False, error="空音频数据")
         if not self._api_key:
-            return TranscriptionResult(False, error="未设置 OPENAI_API_KEY")
+            return TranscriptionResult(False, error="未配置语音识别 API Key。DeepSeek 不支持 /audio/transcriptions，请在设置中配置 OpenAI/Whisper 兼容的语音识别 Key。")
 
         # 构造 multipart/form-data
         boundary = f"----WhisperBoundary{uuid.uuid4().hex[:8]}"
@@ -203,7 +219,7 @@ class SpeechService:
         lines.append(f"--{boundary}")
         lines.append('Content-Disposition: form-data; name="model"')
         lines.append("")
-        lines.append("whisper-1")
+        lines.append(self._model or "whisper-1")
 
         # language field (optional)
         if language:
