@@ -580,10 +580,14 @@ class APIHandler(BaseHTTPRequestHandler):
         music_dir = self._music_dir()
 
         if sub_path:
-            # 返回指定文件的音频内容（JSON/CSV 格式的采样数组，或 WAV 文件的原始数据）
             fp = music_dir / sub_path
             if not fp.is_file():
                 self._send_json({"error": f"文件不存在: {sub_path}"}, 404)
+                return
+            # 二进制音频格式不解析，直接返回 metadata
+            ext = fp.suffix.lower()
+            if ext in (".wav", ".mp3", ".flac", ".ogg", ".aac", ".m4a", ".wma", ".aiff", ".opus"):
+                self._send_json({"name": fp.name, "samples": [], "total_length": 0, "format": ext, "note": "二进制音频格式，不支持前端预览"})
                 return
             try:
                 import numpy as np

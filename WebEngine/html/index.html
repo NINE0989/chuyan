@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MusicShader</title>
+<link rel="stylesheet" href="./static/atom-one-dark.min.css">
 <style>
 :root {
   --bg: #0f0e17; --surface: #1a1930; --border: #2d2a4a;
@@ -51,11 +52,18 @@ main{flex:1;display:flex;overflow:hidden}
 .msg .bubble code{background:rgba(0,0,0,.3);padding:2px 5px;border-radius:4px;font-size:11px}
 .msg .bubble pre{background:rgba(0,0,0,.4);padding:8px 10px;border-radius:6px;overflow-x:auto;font-size:11px;margin:6px 0}
 .msg .bubble pre code{background:none;padding:0}
+.msg .bubble pre code.hljs{background:inherit}
 .msg .bubble ul,.msg .bubble ol{padding-left:18px;margin:4px 0}
 .msg .bubble li{margin:2px 0}
-.msg .bubble h2,.msg .bubble h3,.msg .bubble h4{margin:8px 0 4px;font-size:13px}
+.msg .bubble h1,.msg .bubble h2,.msg .bubble h3,.msg .bubble h4,.msg .bubble h5,.msg .bubble h6{margin:8px 0 4px;font-size:13px}
 .msg .bubble p{margin:4px 0}
 .msg .bubble b{color:var(--accent2)}
+.msg .bubble strong{color:var(--accent2)}
+.msg .bubble em{font-style:italic}
+.msg .bubble a{color:var(--accent);text-decoration:underline}
+.msg .bubble a:hover{color:var(--accent2)}
+.msg .bubble del{text-decoration:line-through;color:var(--text2)}
+.msg .bubble th{padding:3px 8px;border:1px solid var(--border);font-weight:600;background:rgba(127,90,240,.1)}
 .msg .bubble hr{border:none;border-top:1px solid var(--border);margin:10px 0}
 .msg .bubble table{width:100%;border-collapse:collapse;margin:6px 0;font-size:11px}
 .msg .bubble td{padding:3px 8px;border:1px solid var(--border)}
@@ -93,7 +101,10 @@ main{flex:1;display:flex;overflow:hidden}
 #code-section{flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:120px}
 #editor-header{padding:6px 12px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border);font-size:11px;color:var(--text2);background:var(--surface)}
 #editor-header .dot{width:7px;height:7px;border-radius:50%;background:var(--accent2);display:inline-block;margin-right:6px}
-#code-editor{flex:1;width:100%;padding:12px;background:var(--bg);color:#c9d1d9;border:none;resize:none;font-family:"Cascadia Code","Fira Code",Consolas,monospace;font-size:12px;line-height:1.6;outline:none;tab-size:4}
+#editor-wrap{position:relative;flex:1;min-height:0}
+#editor-highlight{position:absolute;inset:0;padding:12px;margin:0;overflow:auto;pointer-events:none;background:var(--bg);white-space:pre-wrap;word-break:break-word;border:none;font-family:"Cascadia Code","Fira Code",Consolas,monospace;font-size:12px;line-height:1.6}
+#editor-highlight code{background:none!important;padding:0!important}
+#code-editor{position:absolute;inset:0;padding:12px;background:transparent;color:transparent;caret-color:#c9d1d9;border:none;resize:none;font-family:"Cascadia Code","Fira Code",Consolas,monospace;font-size:12px;line-height:1.6;outline:none;tab-size:4;z-index:1}
 #editor-actions{display:flex;gap:6px;padding:6px 12px;border-top:1px solid var(--border);background:var(--surface)}
 #editor-actions button{padding:6px 12px;border-radius:6px;border:none;cursor:pointer;font-size:11px;font-weight:600;transition:all .2s}
 .btn-apply{background:var(--accent2);color:#000}.btn-apply:hover{background:#3cc76a}
@@ -286,6 +297,10 @@ main{gap:10px;padding:10px 12px 12px}
 #editor-header .dot{background:#60a5fa;box-shadow:0 0 12px #3b82f6}
 #code-editor{border-width:0;border-radius:0;color:#cbd5e1}
 #code-editor:focus{background:rgba(2,6,23,.86)}
+/* Editor overlay with syntax highlighting */
+#editor-highlight{background:rgba(2,6,23,.86);border:1px solid transparent;border-radius:0}
+#code-editor{background:transparent!important;color:transparent!important;caret-color:#dbeafe;z-index:1;border-width:0!important}
+#code-editor:focus{background:transparent!important}
 #editor-actions{padding:8px 12px}
 .btn-apply{background:rgba(37,99,235,.18);color:#bfdbfe;border:1px solid rgba(96,165,250,.25)!important}
 .btn-apply:hover{background:rgba(37,99,235,.3)}
@@ -363,7 +378,10 @@ main{gap:10px;padding:10px 12px 12px}
   <div id="center-panel">
     <div id="code-section">
       <div id="editor-header"><span><span class="dot"></span>GLSL 代码编辑器</span><span id="editor-status" style="color:var(--accent2)"></span></div>
-      <textarea id="code-editor" placeholder="GLSL 代码将在 AI 生成后显示在这里&#10;也可以直接粘贴 GLSL 代码编辑" spellcheck="false"></textarea>
+      <div id="editor-wrap">
+        <pre id="editor-highlight"><code class="language-glsl"></code></pre>
+        <textarea id="code-editor" placeholder="GLSL 代码将在 AI 生成后显示在这里&#10;也可以直接粘贴 GLSL 代码编辑" spellcheck="false"></textarea>
+      </div>
       <div id="editor-actions">
         <button class="btn-apply" onclick="applyShader()">▶ 应用</button>
         <button class="btn-save" onclick="saveShader()">💾 保存</button>
@@ -404,6 +422,9 @@ main{gap:10px;padding:10px 12px 12px}
   </div>
 </div>
 
+<script src="./static/marked.min.js"></script>
+<script src="./static/highlight.min.js"></script>
+<script src="./static/purify.min.js"></script>
 <script>
 // ============ State ============
 let currentCode = "", hasGeneratedOnce = false, currentPath = "", loading = false;
@@ -480,7 +501,7 @@ async function newConversation() {
     const d = await r.json();
     currentSessionId = d.session_id;
     document.getElementById("chat-messages").innerHTML = "";
-    document.getElementById("code-editor").value = "";
+    setEditorValue("");
     currentCode = "";
     hasGeneratedOnce = false;
     updateConvTitle("新对话");
@@ -503,7 +524,7 @@ async function switchConversation(sessionId) {
     if (d.messages && d.messages.length) {
       for (const m of d.messages) {
         const isShader = m.content && (m.content.includes("#version") || m.content.includes("void main"));
-        addMessage(m.role, m.content, isShader || m.role === "assistant");
+        addMessage(m.role, m.content, isShader);
       }
     }
     // 显示欢迎语（仅空对话）
@@ -524,7 +545,7 @@ async function switchConversation(sessionId) {
           if (cleanCode.includes("#version") || cleanCode.includes("void main")) {
             currentCode = cleanCode;
             hasGeneratedOnce = true;
-            document.getElementById("code-editor").value = cleanCode;
+            setEditorValue(cleanCode);
           }
           break;
         }
@@ -659,63 +680,53 @@ document.addEventListener("keydown", e => {
 
 // ============ Markdown Render ============
 function renderMd(text) {
-  let t = text.replace(/\n{3,}/g, '\n\n').trim();
-  // Split into blocks (by double newline)
-  let blocks = t.split(/\n\n+/);
-  return blocks.map(block => {
-    let lines = block.split('\n');
-    let first = lines[0].trim();
-
-    // Horizontal rule
-    if (/^---+$/.test(first)) return '<hr>';
-    // Headers
-    if (/^### /.test(first)) return `<h4>${first.slice(4)}</h4>`;
-    if (/^## /.test(first)) return `<h3>${first.slice(3)}</h3>`;
-    if (/^# /.test(first)) return `<h2>${first.slice(2)}</h2>`;
-    // Blockquote
-    if (/^> /.test(first)) return `<blockquote>${lines.map(l => l.replace(/^> ?/, '')).join('<br>')}</blockquote>`;
-
-    // Table: all lines start with |
-    if (first.startsWith('|') && lines.length >= 2) {
-      let rows = lines.filter(l => l.includes('|') && !l.includes('---')).map(row =>
-        '<tr>' + row.split('|').slice(1, -1).map(c => `<td>${c.trim()}</td>`).join('') + '</tr>'
-      );
-      return `<table>${rows.join('')}</table>`;
-    }
-
-    // Inline formatting within paragraph
-    let html = block
-      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-      .replace(/```(\w*)\n?([\s\S]*?)```/g, '<pre><code>$2</code></pre>')
-      .replace(/`([^`]+)`/g, '<code>$1</code>')
-      .replace(/\*\*\*(.+?)\*\*\*/g, '<b><i>$1</i></b>')
-      .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
-      .replace(/\*(.+?)\*/g, '<i>$1</i>')
-      .replace(/\n/g, '<br>');
-
-    // List detection
-    let listItems = html.split('<br>').filter(l => /^\d+\.\s/.test(l.trim()) || /^-\s/.test(l.trim()));
-    if (listItems.length >= 2) {
-      let items = html.split('<br>').map(l => {
-        let trimmed = l.trim();
-        if (/^\d+\.\s/.test(trimmed)) return `<li>${trimmed.replace(/^\d+\.\s*/, '')}</li>`;
-        if (/^-\s/.test(trimmed)) return `<li>${trimmed.replace(/^-\s*/, '')}</li>`;
-        return l;
-      }).join('');
-      return `<ul>${items}</ul>`;
-    }
-
-    return `<p>${html}</p>`;
-  }).join('');
+  if (!text) return '';
+  if (typeof marked === 'undefined') return text;
+  var html = marked.parse(text.trim(), { gfm: true }).trimEnd();
+  if (typeof DOMPurify !== 'undefined') {
+    html = DOMPurify.sanitize(html);
+  }
+  return html;
 }
+function highlightBubbleCode(root) {
+  if (typeof hljs === 'undefined') return;
+  root.querySelectorAll('pre code').forEach(function(el) {
+    if (!el.classList.contains('hljs')) {
+      try { hljs.highlightElement(el); } catch(e) {}
+    }
+  });
+}
+
+// ============ Editor Syntax Highlighting ============
+function syncEditorHighlight() {
+  var ta = document.getElementById("code-editor");
+  if (!ta) return;
+  var pre = document.getElementById("editor-highlight");
+  var code = pre.querySelector("code");
+  code.textContent = ta.value || " ";
+  try { hljs.highlightElement(code); } catch(e) {}
+  pre.scrollTop = ta.scrollTop;
+  pre.scrollLeft = ta.scrollLeft;
+}
+function setEditorValue(val) {
+  document.getElementById("code-editor").value = val;
+  syncEditorHighlight();
+}
+document.getElementById("code-editor").addEventListener("input", syncEditorHighlight);
+document.getElementById("code-editor").addEventListener("scroll", function() {
+  var pre = document.getElementById("editor-highlight");
+  if (pre) { pre.scrollTop = this.scrollTop; pre.scrollLeft = this.scrollLeft; }
+});
 
 // ============ Chat ============
 function addMessage(role, text, html) {
+  if (role === "assistant") role = "ai";
   const el = document.createElement("div");
   el.className = "msg " + role;
   const content = html ? text : renderMd(text);
   el.innerHTML = `<div class="avatar">${role==="user"?"😎":"AI"}</div><div class="bubble">${content}</div>`;
   document.getElementById("chat-messages").appendChild(el);
+  if (!html) highlightBubbleCode(el);
   el.scrollIntoView({behavior:"smooth"});
   return el;
 }
@@ -775,10 +786,10 @@ async function doChatStream(prompt) {
   const bubbleEl = msgEl.querySelector(".bubble");
 
   await streamSSE("/api/chat/stream", {prompt, adjust:hasGeneratedOnce, mode:currentMode, session_id:currentSessionId},
-    (fullText) => { bubbleEl.innerHTML = renderMd(fullText); msgEl.scrollIntoView({behavior:"smooth"}); },
+    (fullText) => { bubbleEl.innerHTML = renderMd(fullText); highlightBubbleCode(bubbleEl); msgEl.scrollIntoView({behavior:"smooth"}); },
     (err, fullText) => {
       loading = false; document.getElementById("send-btn").disabled = false;
-      if (err) { bubbleEl.innerHTML = renderMd(err); setStatus("就绪"); return; }
+      if (err) { bubbleEl.innerHTML = renderMd(err); highlightBubbleCode(bubbleEl); setStatus("就绪"); return; }
       // 检测分析结果 → 显示「切换并生成」按钮
       if (fullText && (fullText.includes("推荐风格") || fullText.includes("确认生成") || fullText.includes("估算时长") || fullText.includes("采样点数"))) {
         const btnRow = document.createElement("div");
@@ -809,10 +820,10 @@ async function doAnalyze(prompt) {
   const bubbleEl = msgEl.querySelector(".bubble");
 
   await streamSSE("/api/chat/analyze", {prompt, mode:"build", session_id:currentSessionId},
-    (fullText) => { bubbleEl.innerHTML = renderMd(fullText); msgEl.scrollIntoView({behavior:"smooth"}); },
+    (fullText) => { bubbleEl.innerHTML = renderMd(fullText); highlightBubbleCode(bubbleEl); msgEl.scrollIntoView({behavior:"smooth"}); },
     (err, analysisText) => {
       loading = false; document.getElementById("send-btn").disabled = false;
-      if (err) { bubbleEl.innerHTML = renderMd(err); setStatus("就绪"); return; }
+      if (err) { bubbleEl.innerHTML = renderMd(err); highlightBubbleCode(bubbleEl); setStatus("就绪"); return; }
       // 在气泡下方加确认按钮
       const btnRow = document.createElement("div");
       btnRow.className = "analysis-actions";
@@ -837,10 +848,10 @@ async function doBuild(prompt, analysisContext) {
   const bubbleEl = msgEl.querySelector(".bubble");
 
   await streamSSE("/api/chat/build", {prompt, analysis_context:analysisContext, mode:"build", session_id:currentSessionId},
-    (fullText) => { bubbleEl.innerHTML = renderMd(fullText); msgEl.scrollIntoView({behavior:"smooth"}); },
+    (fullText) => { bubbleEl.innerHTML = renderMd(fullText); highlightBubbleCode(bubbleEl); msgEl.scrollIntoView({behavior:"smooth"}); },
     (err, fullText) => {
       loading = false; document.getElementById("send-btn").disabled = false;
-      if (err) { bubbleEl.innerHTML = renderMd(err); setStatus("就绪"); return; }
+      if (err) { bubbleEl.innerHTML = renderMd(err); highlightBubbleCode(bubbleEl); setStatus("就绪"); return; }
       applyShaderResult(fullText);
     }
   );
@@ -863,7 +874,7 @@ function applyShaderResult(fullText) {
   const isError = fullText.includes("Error code:") || fullText.includes("Recursion limit");
   if (isShader) {
     currentCode = cleanCode; hasGeneratedOnce = true;
-    document.getElementById("code-editor").value = cleanCode;
+    setEditorValue(cleanCode);
     setStatus("✅ Shader 生成完成"); startPreview();
   } else if (isError) {
     setStatus("❌ 生成失败");
@@ -898,7 +909,7 @@ async function showShaderLib() {
 async function loadShader(path, name) {
   const r = await fetch("/api/shader?path="+encodeURIComponent(path));
   const d = await r.json();
-  if (d.code) { currentCode=d.code;currentPath=path;document.getElementById("code-editor").value=d.code; document.getElementById("shader-overlay").classList.remove("show"); setStatus("加载: "+name); }
+  if (d.code) { currentCode=d.code;currentPath=path;setEditorValue(d.code); document.getElementById("shader-overlay").classList.remove("show"); setStatus("加载: "+name); }
   else setStatus("❌ "+d.error);
 }
 function toggleShaderMenu(path, btn) {
@@ -1156,6 +1167,7 @@ function fmtSize(b) { return b<1024?b+"B":b<1048576?(b/1024).toFixed(1)+"KB":(b/
 (async ()=>{
   await loadConversations();
   loadMusicCache(); loadMusic();
+  syncEditorHighlight();
 })();
 </script>
 </body>

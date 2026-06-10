@@ -49,9 +49,16 @@ def load_audio_from_file(path: str) -> str:
     """
     p = Path(path)
     if not p.is_file():
-        # 尝试在 MusicLib/ 中查找
         music_dir = _get_music_dir()
-        candidates = list(music_dir.rglob(p.name)) if not p.parent.name else [music_dir / p]
+        # 去掉可能的 MusicLib/ 前缀，防止路径重复
+        rel = path.replace("\\", "/")
+        if rel.startswith("MusicLib/"):
+            rel = rel[len("MusicLib/"):]
+        p2 = Path(rel)
+        if str(p2.parent) == ".":
+            candidates = list(music_dir.rglob(p2.name))
+        else:
+            candidates = [music_dir / p2]
         for c in candidates:
             if c.is_file():
                 p = c

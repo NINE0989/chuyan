@@ -1,7 +1,4 @@
 #version 330
-// AI_PIPELINE_HOOK
-// style_profile: minimal
-// generated_with: langgraph_agent
 
 uniform vec3 iResolution;
 uniform float iTime;

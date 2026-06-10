@@ -214,6 +214,9 @@
     pre.textContent = codeText;
     bubble.appendChild(pre);
     enhancePre(pre, 0);
+    if (typeof hljs !== 'undefined') {
+      try { hljs.highlightElement(pre); } catch(e) {}
+    }
   }
 
   function installEditorActions() {

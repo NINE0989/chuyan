@@ -83,7 +83,18 @@ def load_audio_array(path: str = "") -> str:
         return json.dumps({"audio_array": []})
     p = Path(path)
     if not p.is_file():
-        return json.dumps({"audio_array": []})
+        # 尝试在 MusicLib/ 中查找
+        try:
+            from ai_pipeline.tools.audio_tools import _get_music_dir
+            music_dir = _get_music_dir()
+            for c in music_dir.rglob(p.name):
+                if c.is_file():
+                    p = c
+                    break
+            else:
+                return json.dumps({"audio_array": []})
+        except Exception:
+            return json.dumps({"audio_array": []})
 
     text = p.read_text(encoding="utf-8-sig", errors="ignore").strip()
     data = []
