@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MusicShader</title>
 <link rel="stylesheet" href="./static/code-blocks.css?v=20260610_stable_scrollbar">
+<link rel="stylesheet" href="./static/ai-loading.css?v=20260610_ai_loading_split">
 <style>
 :root {
   --bg: #0f0e17; --surface: #1a1930; --border: #2d2a4a;
@@ -700,6 +701,7 @@ function switchToBuild(prompt, analysisText) {
 // ---- Build: Analyze phase ----
 async function doAnalyze(prompt) {
   setStatus("🔍 分析中...");
+  if (window.MusicShaderAILoading) window.MusicShaderAILoading.show("analyze");
   const msgEl = document.createElement("div"); msgEl.className = "msg ai";
   msgEl.innerHTML = `<div class="avatar">AI</div><div class="bubble"></div>`;
   document.getElementById("chat-messages").appendChild(msgEl);
@@ -709,7 +711,11 @@ async function doAnalyze(prompt) {
     (fullText) => { bubbleEl.innerHTML = renderMd(fullText); refreshCodeTools(msgEl); msgEl.scrollIntoView({behavior:"smooth"}); },
     (err, analysisText) => {
       loading = false; document.getElementById("send-btn").disabled = false;
-      if (err) { bubbleEl.innerHTML = renderMd(err); refreshCodeTools(msgEl); setStatus("就绪"); return; }
+      if (err) {
+        if (window.MusicShaderAILoading) window.MusicShaderAILoading.hide();
+        bubbleEl.innerHTML = renderMd(err); refreshCodeTools(msgEl); setStatus("就绪"); return;
+      }
+      if (window.MusicShaderAILoading) window.MusicShaderAILoading.update("ready");
       // 在气泡下方加确认按钮
       const btnRow = document.createElement("div");
       btnRow.className = "analysis-actions";
@@ -726,6 +732,7 @@ async function doAnalyze(prompt) {
 async function doBuild(prompt, analysisContext) {
   loading = true; document.getElementById("send-btn").disabled = true;
   setStatus("🔨 生成中...");
+  if (window.MusicShaderAILoading) window.MusicShaderAILoading.show("build");
   // 移除旧的确认按钮
   document.querySelectorAll(".analysis-actions").forEach(e => e.remove());
 
@@ -738,7 +745,10 @@ async function doBuild(prompt, analysisContext) {
     (fullText) => { bubbleEl.innerHTML = renderMd(fullText); refreshCodeTools(msgEl); msgEl.scrollIntoView({behavior:"smooth"}); },
     (err, fullText) => {
       loading = false; document.getElementById("send-btn").disabled = false;
-      if (err) { bubbleEl.innerHTML = renderMd(err); refreshCodeTools(msgEl); setStatus("就绪"); return; }
+      if (err) {
+        if (window.MusicShaderAILoading) window.MusicShaderAILoading.hide();
+        bubbleEl.innerHTML = renderMd(err); refreshCodeTools(msgEl); setStatus("就绪"); return;
+      }
       refreshCodeTools(msgEl);
       applyShaderResult(fullText);
     }
@@ -764,10 +774,13 @@ function applyShaderResult(fullText) {
     currentCode = cleanCode; hasGeneratedOnce = true;
     document.getElementById("code-editor").value = cleanCode;
     setStatus("✅ Shader 生成完成"); startPreview();
+    if (window.MusicShaderAILoading) window.MusicShaderAILoading.complete();
     scheduleReloadAfterBuild();
   } else if (isError) {
+    if (window.MusicShaderAILoading) window.MusicShaderAILoading.hide();
     setStatus("❌ 生成失败");
   } else if (fullText.trim()) {
+    if (window.MusicShaderAILoading) window.MusicShaderAILoading.hide();
     setStatus("就绪");
   }
 }
@@ -1089,5 +1102,6 @@ function fmtSize(b) { return b<1024?b+"B":b<1048576?(b/1024).toFixed(1)+"KB":(b/
 })();
 </script>
 <script src="./static/code-blocks.js?v=20260610_stable_scrollbar"></script>
+<script src="./static/ai-loading.js?v=20260610_ai_loading_split"></script>
 </body>
 </html>
