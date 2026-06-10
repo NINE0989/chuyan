@@ -8,7 +8,12 @@ from typing import Optional
 
 
 class Settings:
-    """单例配置管理器，优先级：环境变量 > 配置文件 > 默认值。"""
+    """单例配置管理器，优先级：配置文件 > 环境变量 > 默认值。
+
+    设置页写入 settings.json 后应立即成为应用有效配置，避免被父进程里
+    残留的 OPENAI_* 环境变量覆盖。若确实需要环境变量优先，可设置
+    MS_PREFER_ENV=1。
+    """
 
     _instance: Optional["Settings"] = None
     _config_path: Path
@@ -18,6 +23,9 @@ class Settings:
         "api_key": "",
         "base_url": "https://api.openai.com/v1",
         "model": "gpt-4.1-mini",
+        "speech_api_key": "",
+        "speech_base_url": "https://api.openai.com/v1",
+        "speech_model": "whisper-1",
     }
 
     def __new__(cls, config_dir: Path | None = None):
@@ -62,19 +70,53 @@ class Settings:
         self._set("model", value)
 
     @property
+    def speech_api_key(self) -> str:
+        return self._get("speech_api_key", "OPENAI_SPEECH_API_KEY")
+
+    @speech_api_key.setter
+    def speech_api_key(self, value: str):
+        self._set("speech_api_key", value)
+
+    @property
+    def speech_base_url(self) -> str:
+        return self._get("speech_base_url", "OPENAI_SPEECH_BASE_URL")
+
+    @speech_base_url.setter
+    def speech_base_url(self, value: str):
+        self._set("speech_base_url", value)
+
+    @property
+    def speech_model(self) -> str:
+        return self._get("speech_model", "OPENAI_SPEECH_MODEL")
+
+    @speech_model.setter
+    def speech_model(self, value: str):
+        self._set("speech_model", value)
+
+    @property
     def has_api_key(self) -> bool:
         return bool(self.api_key)
 
+    @property
+    def has_speech_api_key(self) -> bool:
+        return bool(self.speech_api_key)
+
     # --- 读取逻辑 ---
     def _get(self, config_key: str, env_var: str) -> str:
-        """环境变量优先，否则读 JSON 文件，否则默认值。"""
+        """默认配置文件优先；MS_PREFER_ENV=1 时环境变量优先。"""
         env_val = os.getenv(env_var, "").strip()
-        if env_val:
-            return env_val
-
         file_val = self._read_file().get(config_key, "")
-        if file_val:
-            return file_val
+
+        if os.getenv("MS_PREFER_ENV", "").strip() == "1":
+            if env_val:
+                return env_val
+            if file_val:
+                return file_val
+        else:
+            if file_val:
+                return file_val
+            if env_val:
+                return env_val
 
         return self.DEFAULTS.get(config_key, "")
 
@@ -104,9 +146,20 @@ class Settings:
             "api_key": self.api_key,
             "base_url": self.base_url,
             "model": self.model,
+            "speech_api_key": self.speech_api_key,
+            "speech_base_url": self.speech_base_url,
+            "speech_model": self.speech_model,
         }
 
-    def update(self, api_key: str = "", base_url: str = "", model: str = ""):
+    def update(
+        self,
+        api_key: str = "",
+        base_url: str = "",
+        model: str = "",
+        speech_api_key: str = "",
+        speech_base_url: str = "",
+        speech_model: str = "",
+    ):
         """批量更新并持久化。"""
         if api_key:
             self.api_key = api_key
@@ -114,6 +167,12 @@ class Settings:
             self.base_url = base_url
         if model:
             self.model = model
+        if speech_api_key:
+            self.speech_api_key = speech_api_key
+        if speech_base_url:
+            self.speech_base_url = speech_base_url
+        if speech_model:
+            self.speech_model = speech_model
 
     def get_deepseek_presets(self) -> dict:
         """DeepSeek 预设值。"""

@@ -639,10 +639,20 @@ class APIHandler(BaseHTTPRequestHandler):
                 api_key=body.get("api_key", ""),
                 base_url=body.get("base_url", ""),
                 model=body.get("model", ""),
+                speech_api_key=body.get("speech_api_key", ""),
+                speech_base_url=body.get("speech_base_url", ""),
+                speech_model=body.get("speech_model", ""),
             )
         # 同步更新 AI service
         if self.__class__._ai_service:
             self.__class__._ai_service.provider = "openai" if self.settings.has_api_key else "mock"
+        # speech service caches API settings; rebuild it after settings changes.
+        if self.__class__._speech_service:
+            try:
+                self.__class__._speech_service.close()
+            except Exception:
+                pass
+            self.__class__._speech_service = None
         self._send_json({"ok": True})
 
     def log_message(self, format, *args):
