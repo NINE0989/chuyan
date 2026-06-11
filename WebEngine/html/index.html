@@ -140,6 +140,8 @@ main{flex:1;display:flex;overflow:hidden}
 .overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.7);z-index:100;justify-content:center;align-items:center}
 .overlay.show{display:flex}
 .overlay-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:24px;max-width:700px;width:90%;max-height:80vh;overflow-y:auto}
+#settings-overlay .overlay-card{scrollbar-width:none}
+#settings-overlay .overlay-card::-webkit-scrollbar{display:none}
 .overlay-card h3{font-size:16px;margin-bottom:12px;color:var(--text)}
 #shader-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px}
 .shader-card{background:var(--bg);border-radius:10px;padding:12px;cursor:pointer;border:1px solid var(--border);transition:all .2s}
@@ -243,6 +245,7 @@ header{
 .logo .ms,.logo .s{
   color:transparent;background:linear-gradient(135deg,#60a5fa,#a78bfa);background-clip:text;-webkit-background-clip:text;
 }
+.logo .s{color:#fff;background:none;text-shadow:0 0 18px rgba(255,255,255,.28)}
 #mode-indicator{background:rgba(59,130,246,.1);color:#bfdbfe;transition:all .2s}
 #mode-indicator:hover{border-color:var(--border-hover)!important;box-shadow:0 0 20px rgba(59,130,246,.18)}
 .header-right button,.conv-actions button{
@@ -260,6 +263,12 @@ main{gap:10px;padding:10px 12px 12px}
 #center-panel{background:rgba(8,15,31,.72)}
 #conv-header,#editor-header,#editor-actions,#chat-input-row,#music-panel,#conv-dropdown{
   background:rgba(15,23,42,.64);
+}
+#conv-dropdown{
+  background:rgba(8,15,31,.94);
+  backdrop-filter:blur(30px) saturate(125%);
+  -webkit-backdrop-filter:blur(30px) saturate(125%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.04);
 }
 #conv-header,#editor-header,#music-header{padding:10px 14px}
 #chat-messages{padding:16px}
@@ -323,8 +332,10 @@ main{gap:10px;padding:10px 12px 12px}
 .shader-card{background:rgba(15,23,42,.62);border-color:var(--border);border-radius:16px;padding:14px}
 .shader-card:hover{border-color:var(--border-hover);transform:translateY(-2px);box-shadow:0 12px 30px rgba(59,130,246,.18)}
 .conv-item{margin:3px 7px;padding:10px;border-radius:12px;border:1px solid transparent}
-.conv-item:hover{background:rgba(59,130,246,.1);border-color:var(--border)}
+.conv-item:hover{background:rgba(59,130,246,.1);border-color:var(--border);transform:none}
 .conv-item.active{background:linear-gradient(135deg,rgba(37,99,235,.2),rgba(124,58,237,.12));border-color:rgba(96,165,250,.25);border-left-color:#60a5fa}
+.conv-menu-btn{display:flex;visibility:hidden;opacity:0;transition:opacity .15s,background .15s,color .15s}
+.conv-item:hover .conv-menu-btn,.conv-menu-btn:focus-visible{visibility:visible;opacity:1}
 #status-bar{padding:6px 12px;background:rgba(15,23,42,.68);color:#64748b}
 ::-webkit-scrollbar{width:7px;height:7px}
 ::-webkit-scrollbar-thumb{background:rgba(96,165,250,.22);border-radius:999px}
@@ -524,13 +535,16 @@ async function switchConversation(sessionId) {
     if (d.messages && d.messages.length) {
       for (const m of d.messages) {
         const isShader = m.content && (m.content.includes("#version") || m.content.includes("void main"));
-        addMessage(m.role, m.content, isShader);
+        addMessage(m.role, m.content, isShader, false);
       }
     }
     // 显示欢迎语（仅空对话）
     if (!d.messages || !d.messages.length) {
-      addMessage("ai","🤖 <b>MusicShader</b> 就绪<br>📋 <b>Plan</b> 模式 = 对话交流<br>🔨 <b>Build</b> 模式 = 生成 Shader<br><br>按 <b>Shift+Tab</b> 切换模式<br>输入 <b>/</b> 快速引用音乐库", true);
+      addMessage("ai","🤖 <b>MusicShader</b> 就绪<br>📋 <b>Plan</b> 模式 = 对话交流<br>🔨 <b>Build</b> 模式 = 生成 Shader<br><br>按 <b>Shift+Tab</b> 切换模式<br>输入 <b>/</b> 快速引用音乐库", true, false);
     }
+    container.style.scrollBehavior = "auto";
+    container.scrollTop = container.scrollHeight;
+    requestAnimationFrame(() => { container.style.scrollBehavior = ""; });
     convLoaded = true;
     // 从会话列表查找标题
     const found = conversations.find(c => c.session_id === sessionId);
@@ -644,7 +658,7 @@ document.addEventListener("keydown", e => {
 
 // ============ Drag Resize (All panels) ============
 (function(){
-  function makeResizable(panelId, resizeId, dim, minPx, maxPx) {
+  function makeResizable(panelId, resizeId, dim, minPx, maxPx, direction = 1) {
     const panel = document.getElementById(panelId);
     const handle = document.getElementById(resizeId);
     let dragging = false, start = 0, startSize = 0;
@@ -658,7 +672,7 @@ document.addEventListener("keydown", e => {
     });
     document.addEventListener("mousemove", e => {
       if (!dragging) return;
-      const delta = (dim === "width" ? e.clientX : e.clientY) - start;
+      const delta = ((dim === "width" ? e.clientX : e.clientY) - start) * direction;
       const newSize = Math.max(minPx, Math.min(maxPx, startSize + delta));
       panel.style.flex = "none";
       if (dim === "width") panel.style.width = newSize + "px";
@@ -673,9 +687,9 @@ document.addEventListener("keydown", e => {
   // 左侧聊天面板拖拽
   makeResizable("chat-panel", "chat-resize", "width", 280, 600);
   // 右侧音乐库面板拖拽
-  makeResizable("music-panel", "music-resize", "width", 160, 400);
+  makeResizable("music-panel", "music-resize", "width", 160, 400, -1);
   // 代码编辑器高度拖拽
-  makeResizable("code-section", "drag-handle", "height", 60, 9999);
+  makeResizable("code-section", "drag-handle", "height", 60, 9999, -1);
 })();
 
 // ============ Markdown Render ============
@@ -719,7 +733,7 @@ document.getElementById("code-editor").addEventListener("scroll", function() {
 });
 
 // ============ Chat ============
-function addMessage(role, text, html) {
+function addMessage(role, text, html, scroll = true) {
   if (role === "assistant") role = "ai";
   const el = document.createElement("div");
   el.className = "msg " + role;
@@ -727,7 +741,7 @@ function addMessage(role, text, html) {
   el.innerHTML = `<div class="avatar">${role==="user"?"😎":"AI"}</div><div class="bubble">${content}</div>`;
   document.getElementById("chat-messages").appendChild(el);
   if (!html) highlightBubbleCode(el);
-  el.scrollIntoView({behavior:"smooth"});
+  if (scroll) el.scrollIntoView({behavior:"smooth"});
   return el;
 }
 async function sendMessage() {
