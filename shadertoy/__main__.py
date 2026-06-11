@@ -2,6 +2,7 @@
 Main application entry point for ShaderToy-like application.
 """
 import sys
+import os
 from pathlib import Path
 import time
 import datetime
@@ -11,16 +12,29 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from shadertoy.shader import ShaderViewer
 from shadertoy.audio import AudioSource
+from shadertoy.gesture import GestureTracker
 from shadertoy.uniforms import ShaderToyUniforms, TextureChannel
 
 class ShaderToyApp:
     """Main application class managing uniforms and rendering"""
-    def __init__(self, shader_path: str, width: int = 1920, height: int = 480):
-        self.viewer = ShaderViewer(width, height)
+    def __init__(self, shader_path: str, width: int = 1920, height: int = 480, borderless: bool = False,
+                 monitor_index: int | None = None, center: bool = False, offset: tuple[int, int] | None = None,
+                 gesture_mode: str = "native"):
+        self.viewer = ShaderViewer(width, height, borderless=borderless)
+        if monitor_index is not None:
+            # place window on monitor before loading heavy resources
+            self.viewer.place_on_monitor(monitor_index, center=center, offset=offset)
         self.viewer.load_shader(shader_path)
         
         # Setup audio
         self.audio = AudioSource()
+        # GestureTracker will handle modes: 'native' or 'remote'
+        try:
+            self.gesture = GestureTracker(mode=gesture_mode)
+            self._gesture_enabled = True
+        except Exception:
+            self.gesture = None
+            self._gesture_enabled = False
         # Try to start audio capture; if it fails we continue but note the state
         try:
             self.audio.start_capture()
@@ -29,6 +43,19 @@ class ShaderToyApp:
         except Exception as e:
             self._audio_started = False
             print(f"[audio] capture not started: {e}")
+
+        # Try to start gesture tracking; if it fails we continue with audio-only mode
+        if self._gesture_enabled and self.gesture is not None:
+            try:
+                self.gesture.start_capture()
+                self._gesture_started = True
+                print("[gesture] tracking started (mode=%s)" % getattr(self.gesture, 'mode', 'unknown'))
+            except Exception as e:
+                self._gesture_started = False
+                print(f"[gesture] tracking not started: {e}")
+        else:
+            self._gesture_started = False
+            print("[gesture] tracking disabled for this process")
         
         # Initialize uniforms
         self.uniforms = ShaderToyUniforms()
@@ -42,15 +69,29 @@ class ShaderToyApp:
     def setup_audio_channel(self):
         """Setup audio as iChannel0"""
         import OpenGL.GL as GL
-        tex = GL.glGenTextures(1)
-        GL.glBindTexture(GL.GL_TEXTURE_2D, tex)
+        # Create two textures: iChannel0 for time-domain waveform, iChannel1 for FFT spectrum
+        tex_time = GL.glGenTextures(1)
+        GL.glBindTexture(GL.GL_TEXTURE_2D, tex_time)
         GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MIN_FILTER, GL.GL_LINEAR)
         GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MAG_FILTER, GL.GL_LINEAR)
         GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_WRAP_S, GL.GL_CLAMP_TO_EDGE)
         GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_WRAP_T, GL.GL_CLAMP_TO_EDGE)
-        
+
+        tex_fft = GL.glGenTextures(1)
+        GL.glBindTexture(GL.GL_TEXTURE_2D, tex_fft)
+        GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MIN_FILTER, GL.GL_LINEAR)
+        GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MAG_FILTER, GL.GL_LINEAR)
+        GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_WRAP_S, GL.GL_CLAMP_TO_EDGE)
+        GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_WRAP_T, GL.GL_CLAMP_TO_EDGE)
+
+        # iChannel0: time-domain buffer (width = chunk_size, height = 1)
         self.uniforms.iChannels[0] = TextureChannel(
-            texture_id=tex,
+            texture_id=tex_time,
+            resolution=(self.audio.chunk_size, 1, 0)
+        )
+        # iChannel1: FFT spectrum (width = fft_size, height = 1)
+        self.uniforms.iChannels[1] = TextureChannel(
+            texture_id=tex_fft,
             resolution=(self.audio.fft_size, 1, 0)
         )
 
@@ -70,6 +111,23 @@ class ShaderToyApp:
         # Update frame counter
         self.uniforms.iFrame = self.frame_count
         self.frame_count += 1
+
+        # Update hand tracking uniforms
+        if getattr(self, '_gesture_started', False) and self.gesture is not None:
+            hand_pos, hand_action, hand_depth_ref = self.gesture.get_gesture_data()
+            self.uniforms.iHandPos = (
+                float(hand_pos[0]),
+                float(hand_pos[1]),
+                float(hand_pos[2]),
+            )
+            self.uniforms.iHandAction = float(hand_action)
+            self.uniforms.iHandDepthRef = float(hand_depth_ref)
+            self.uniforms.iPinchEnabled = 1.0 if self.gesture.is_pinch_enabled() else 0.0
+        else:
+            self.uniforms.iHandPos = (0.0, 0.0, 0.0)
+            self.uniforms.iHandAction = 0.0
+            self.uniforms.iHandDepthRef = 0.0
+            self.uniforms.iPinchEnabled = 1.0
         
         # Update date
         now = datetime.datetime.now()
@@ -80,11 +138,30 @@ class ShaderToyApp:
             float(now.hour*3600 + now.minute*60 + now.second)
         )
         
-        # Update audio channel
+        # Update audio channel(s)
         self.audio.update()
-        texdata = self.audio.get_texture_data()
-        self.uniforms.iChannels[0].data = texdata
+        # FFT texture data (shape: 1 x fft_size x 4)
+        texdata_fft = self.audio.get_texture_data()
+
+        # Time-domain buffer: copy current audio buffer into a 1xchunk_size RGBA texture
+        import numpy as _np
+        with self.audio._lock:
+            td = self.audio._audio_buffer.copy()
+        # Ensure correct length
+        if td.size != self.audio.chunk_size:
+            a = _np.zeros(self.audio.chunk_size, dtype=_np.float32)
+            a[:td.size] = td
+            td = a
+        texdata_time = _np.zeros((1, td.size, 4), dtype=_np.float32)
+        texdata_time[0, :, 0] = td  # R channel holds time-domain samples
+
+        # Assign into uniform channels
+        # iChannel0 -> FFT spectrum (ShaderToy standard: iChannel0 = frequency data)
+        self.uniforms.iChannels[0].data = texdata_fft
         self.uniforms.iChannels[0].time = self.uniforms.iTime
+        # iChannel1 -> time-domain waveform
+        self.uniforms.iChannels[1].data = texdata_time
+        self.uniforms.iChannels[1].time = self.uniforms.iTime
         # fill audio-related uniforms - only sample rate
         try:
             self.uniforms.iSampleRate = float(self.audio.sample_rate)
@@ -92,10 +169,10 @@ class ShaderToyApp:
             pass
 
         # Log a basic diagnostic every 60 frames so user can confirm capture
-        if self.frame_count % 60 == 0:
+        if self.frame_count % 300 == 0:
             try:
                 import numpy as _np
-                peak = float(_np.max(texdata)) if texdata is not None else 0.0
+                peak = float(_np.max(texdata_fft)) if texdata_fft is not None else 0.0
                 # Also report raw audio buffer amplitude (before FFT/normalization)
                 try:
                     with self.audio._lock:
@@ -124,6 +201,11 @@ class ShaderToyApp:
                     self.audio.stop_capture()
             except Exception:
                 pass
+            try:
+                if getattr(self, '_gesture_started', False) and self.gesture is not None:
+                    self.gesture.stop_capture()
+            except Exception:
+                pass
             self.viewer.cleanup()
 
 
@@ -144,7 +226,15 @@ def main():
             sys.exit(1)
         shader_path = default_shader
     
-    app = ShaderToyApp(str(shader_path))
+    # Allow optional monitor selection via env: SHADER_MONITOR_INDEX
+    mon_env = os.environ.get("SHADER_MONITOR_INDEX")
+    mon_index = None
+    try:
+        if mon_env is not None:
+            mon_index = int(mon_env)
+    except Exception:
+        mon_index = None
+    app = ShaderToyApp(str(shader_path), monitor_index=mon_index, borderless=False)
     app.run()
 
 

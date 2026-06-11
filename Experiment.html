@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>MediaPipe 手势交互三阶段实验 Demo</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    
+    <style>
+        body { margin: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #1a1a1a; color: white; overflow: hidden; }
+        .container { position: relative; width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; }
+        #input-video { position: absolute; width: 1280px; height: 720px; transform: rotateY(180deg); display: none; }
+        #output-canvas { width: 1280px; height: 720px; background: #000; border: 2px solid #444; border-radius: 8px; transform: rotateY(180deg); }
+        
+        /* 实验调试面板样式 */
+        .debug-panel { position: absolute; left: 20px; top: 20px; width: 320px; background: rgba(0, 0, 0, 0.8); border: 1px solid #00ffcc; padding: 15px; border-radius: 10px; pointer-events: none; }
+        .debug-section { margin-bottom: 15px; font-size: 12px; }
+        .debug-title { color: #00ffcc; font-weight: bold; border-bottom: 1px solid #333; margin-bottom: 5px; padding-bottom: 2px; }
+        .debug-item { display: flex; justify-content: space-between; margin: 2px 0; }
+        .val { color: #ffcc00; }
+        
+        /* 控制面板 */
+        .control-panel { position: absolute; right: 20px; bottom: 20px; background: rgba(0, 0, 0, 0.8); padding: 15px; border-radius: 10px; border: 1px solid #ff00ff; }
+        .control-item { margin-bottom: 10px; font-size: 13px; }
+        
+        /* 交互反馈 */
+        #gesture-toast { position: absolute; top: 40px; right: 40px; font-size: 48px; font-weight: bold; color: #00ffcc; text-shadow: 0 0 10px rgba(0,255,204,0.5); }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <video id="input-video"></video>
+    <canvas id="output-canvas"></canvas>
+    <div id="gesture-toast">WAITING...</div>
+
+    <div class="debug-panel">
+        <div class="debug-section">
+            <div class="debug-title">① 媒体采集调试 (Media Capture)</div>
+            <div class="debug-item">分辨率: <span class="val" id="res-val">-</span></div>
+            <div class="debug-item">实时帧率 (FPS): <span class="val" id="fps-val">0</span></div>
+            <div class="debug-item">流状态: <span class="val" style="color:lawngreen">ACTIVE</span></div>
+        </div>
+        
+        <div class="debug-section">
+            <div class="debug-title">② 关键点调试 (Landmarks)</div>
+            <div class="debug-item">识别手数量: <span class="val" id="hand-count">0</span></div>
+            <div class="debug-item">检测置信度: <span class="val" id="conf-val">0.00</span></div>
+            <div class="debug-item">左右手标签: <span class="val" id="label-val">-</span></div>
+        </div>
+
+        <div class="debug-section">
+            <div class="debug-title">③ 手势解析调试 (Semantic)</div>
+            <div class="debug-item">食指高度: <span class="val" id="index-val">0</span></div>
+            <div class="debug-item">解析逻辑: <span class="val" id="logic-val">Idle</span></div>
+        </div>
+
+        <div class="debug-section">
+            <div class="debug-title">⑤ 性能调试 (Performance/ms)</div>
+            <div class="debug-item">P1.预处理: <span class="val" id="p1-time">0</span></div>
+            <div class="debug-item">P2.AI推理: <span class="val" id="p2-time">0</span></div>
+            <div class="debug-item">P3.语义解析: <span class="val" id="p3-time">0</span></div>
+            <div class="debug-item">总链路耗时: <span class="val" id="total-time">0</span></div>
+        </div>
+    </div>
+
+    <div class="control-panel">
+        <div class="debug-title">④ 全局参数调试</div>
+        <div class="control-item">
+            最小检测置信度: <br>
+            <input type="range" id="min-conf" min="0.1" max="0.9" step="0.1" value="0.5">
+        </div>
+        <div class="control-item">
+            最大手数: <br>
+            <select id="max-hands">
+                <option value="1">1</option>
+                <option value="2">2</option>
+            </select>
+        </div>
+    </div>
+</div>
+
+<script>
+/**
+ * 实验配置与状态
+ */
+const videoElement = document.getElementById('input-video');
+const canvasElement = document.getElementById('output-canvas');
+const canvasCtx = canvasElement.getContext('2d');
+const gestureToast = document.getElementById('gesture-toast');
+
+let lastTime = 0;
+let perf = { p1: 0, p2: 0, p3: 0 };
+
+/**
+ * ---------------------------------------------------------
+ * 阶段 1: Web摄像头媒体采集与图像预处理
+ * ---------------------------------------------------------
+ */
+function initMediaCapture() {
+    const camera = new Camera(videoElement, {
+        onFrame: async () => {
+            const startTime = performance.now();
+            
+            // 计算P1耗时：图像读取与准备
+            perf.p1 = (performance.now() - startTime).toFixed(1);
+            
+            // 触发MediaPipe处理
+            const p2Start = performance.now();
+            await hands.send({ image: videoElement });
+            perf.p2 = (performance.now() - p2Start).toFixed(1);
+        },
+        width: 1280,
+        height: 720
+    });
+    camera.start();
+    
+    // 调试信息更新
+    videoElement.onloadedmetadata = () => {
+        document.getElementById('res-val').innerText = `${videoElement.videoWidth}x${videoElement.videoHeight}`;
+    };
+}
+
+/**
+ * ---------------------------------------------------------
+ * 阶段 2: MediaPipe Hands 手部关键点检测与追踪
+ * ---------------------------------------------------------
+ */
+const hands = new Hands({
+    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+});
+
+// 设置初始参数
+hands.setOptions({
+    maxNumHands: 1,
+    modelComplexity: 1,
+    minDetectionConfidence: 0.5,
+    minTrackingConfidence: 0.5
+});
+
+/**
+ * ---------------------------------------------------------
+ * 阶段 3: 基于关键点几何计算的手势语义解析
+ * ---------------------------------------------------------
+ */
+function parseGesture(landmarks, handedness) {
+    const p3Start = performance.now();
+    
+    // 1. 基础判定：指尖是否高于指节 (Y轴判断)
+    const isFingerUp = (tipIdx, pipIdx) => landmarks[tipIdx].y < landmarks[pipIdx].y;
+
+    const indexUp = isFingerUp(8, 6);
+    const middleUp = isFingerUp(12, 10);
+    const ringUp = isFingerUp(16, 14);
+    const pinkyUp = isFingerUp(20, 18);
+
+    // 2. 稳健的拇指判定：计算拇指尖(4)到食指指根(5)或小指指根(17)的水平距离
+    // 这里使用 4号点到 9号点（中指指根）的距离作为判定基准，避开左右手坐标系正负问题
+    const thumbDistance = Math.sqrt(
+        Math.pow(landmarks[4].x - landmarks[9].x, 2) + 
+        Math.pow(landmarks[4].y - landmarks[9].y, 2)
+    );
+    // 阈值：当拇指尖距离中指指根超过一定比例时判定为张开 (0.15是实验经验值)
+    const thumbUp = thumbDistance > 0.15; 
+
+    let gesture = "Unknown";
+    let command = "IDLE";
+
+    // 3. 逻辑判定矩阵
+    if (indexUp && middleUp && ringUp && pinkyUp && thumbUp) {
+        gesture = "Open Palm";
+        command = "STOP / SELECT";
+    } else if (!indexUp && !middleUp && !ringUp && !pinkyUp && !thumbUp) {
+        gesture = "Fist";
+        command = "GRAB / DRAG";
+    } else if (indexUp && !middleUp && !ringUp && !pinkyUp) {
+        gesture = "Digit 1";
+        command = "POINT / CLICK";
+    } else if (indexUp && middleUp && !ringUp && !pinkyUp) {
+        gesture = "Digit 2";
+        command = "ZOOM / CUT";
+    } else if (indexUp && middleUp && ringUp && pinkyUp && !thumbUp) {
+        gesture = "Digit 5 (No Thumb)";
+        command = "SCROLL";
+    }
+
+    perf.p3 = (performance.now() - p3Start).toFixed(1);
+    
+    document.getElementById('logic-val').innerText = `${thumbUp?'T':''}${indexUp?'I':''}${middleUp?'M':''}${ringUp?'R':''}${pinkyUp?'P':''}`;
+    return { gesture, command };
+}
+
+/**
+ * 结果渲染与可视化调试模块
+ */
+function onResults(results) {
+    canvasCtx.save();
+    canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+    canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+
+    if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+        document.getElementById('hand-count').innerText = results.multiHandLandmarks.length;
+
+        for (let i = 0; i < results.multiHandLandmarks.length; i++) {
+            const landmarks = results.multiHandLandmarks[i];
+            const classification = results.multiHandedness[i];
+            
+            // --- 修复 Bug 1: 左右手标签镜像反转 ---
+            // 因为画面旋转了180度，MediaPipe识别的 Left 实际上是用户视角的 Right
+            let realLabel = classification.label === 'Left' ? 'Right' : 'Left';
+            
+            drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, {color: '#00FFCC', lineWidth: 5});
+            drawLandmarks(canvasCtx, landmarks, {color: '#FFCC00', lineWidth: 2, radius: 4});
+
+            const result = parseGesture(landmarks, classification.label);
+            
+            document.getElementById('label-val').innerText = realLabel;
+            document.getElementById('conf-val').innerText = classification.score.toFixed(2);
+            gestureToast.innerText = result.command;
+        }
+    } else {
+        document.getElementById('hand-count').innerText = "0";
+        gestureToast.innerText = "WAITING...";
+    }
+    // ... 性能统计逻辑保持不变 ...
+    canvasCtx.restore();
+}
+
+hands.onResults(onResults);
+
+/**
+ * ④ 全局参数实时绑定
+ */
+document.getElementById('min-conf').addEventListener('input', (e) => {
+    const val = parseFloat(e.target.value);
+    hands.setOptions({ minDetectionConfidence: val });
+});
+
+document.getElementById('max-hands').addEventListener('change', (e) => {
+    const val = parseInt(e.target.value);
+    hands.setOptions({ maxNumHands: val });
+});
+
+// 初始化实验
+initMediaCapture();
+
+</script>
+</body>
+</html>

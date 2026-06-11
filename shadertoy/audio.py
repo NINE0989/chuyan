@@ -33,6 +33,7 @@ class AudioSource:
         self._lock = threading.Lock()
         self._thread = None
         self._running = False
+        self._stream = None
         self.pa = pyaudio.PyAudio()
 
     def start_capture(self, prefer_loopback: bool = True, device_index: Optional[int] = None) -> None:
@@ -56,7 +57,7 @@ class AudioSource:
             wasapi_info = pa.get_host_api_info_by_type(pyaudio.paWASAPI)
         except OSError:
             logger.error("WASAPI host API not found; is PyAudioWPatch installed and running on Windows?")
-            exit()
+            raise RuntimeError("WASAPI not available — 请安装 PyAudioWPatch")
         
         # Get default WASAPI speakers
         default_speakers = pa.get_device_info_by_index(wasapi_info["defaultOutputDevice"])
@@ -72,7 +73,7 @@ class AudioSource:
                     break
             else:
                 logger.warning("No loopback device found; using default input device instead.")
-                exit()
+                raise RuntimeError("No loopback device found")
         
         self._stream = pa.open(format=pyaudio.paInt16,
                 channels=default_speakers["maxInputChannels"],
@@ -81,6 +82,14 @@ class AudioSource:
                 input=True,
                 input_device_index=default_speakers["index"],
         )
+
+        print(
+            "[audio] capture device="
+            f"{default_speakers['name']} | channels={default_speakers['maxInputChannels']} "
+            f"| sample_rate={int(default_speakers['defaultSampleRate'])} "
+            f"| chunk_size={self.chunk_size} frames "
+            f"| chunk_bytes={self.chunk_size * max(1, int(default_speakers['maxInputChannels'])) * 2}"
+        )
         
         self._running = True
         self._thread = threading.Thread(target=self._reader, daemon=True)
@@ -88,18 +97,28 @@ class AudioSource:
 
     def stop_capture(self):
         self._running = False
+        # 先停流，让阻塞在 read() 的 _reader 线程能检查到 _running 标志
+        if self._stream is not None:
+            try:
+                self._stream.stop_stream()
+            except Exception:
+                pass
         if self._thread is not None:
-            self._thread.join()
+            self._thread.join(timeout=2.0)
             self._thread = None
         if self._stream is not None:
-            self._stream.stop_stream()
-            self._stream.close()
+            try:
+                self._stream.close()
+            except Exception:
+                pass
             self._stream = None
 
     def _reader(self):
+        frame_counter = 0
         while self._running and self._stream is not None:
             try:
                 data = self._stream.read(self.chunk_size, exception_on_overflow=False)
+                frame_counter += 1
                 # If stream is paInt16, convert to float32 in range -1..1
                 arr = np.frombuffer(data, dtype=np.int16)
                 arr = arr.astype(np.float32) / 32768.0
@@ -125,6 +144,15 @@ class AudioSource:
 
                 with self._lock:
                     self._audio_buffer = arr.astype(np.float32)
+
+                if frame_counter % 60 == 0:
+                    with self._lock:
+                        buf_peak = float(np.max(np.abs(self._audio_buffer))) if self._audio_buffer.size else 0.0
+                    print(
+                        f"[audio] read_frame={frame_counter} "
+                        f"raw_bytes={len(data)} raw_samples={arr.size} "
+                        f"buffer_len={self._audio_buffer.size} buffer_peak={buf_peak:.6f}"
+                    )
             except Exception as e:
                 logger.error(f"Audio read error: {e}")
 
@@ -169,7 +197,7 @@ class AudioSource:
             self.frame_count += 1
         else:
             self.frame_count = 0
-        if self.frame_count % 100 == 0:  # 每100帧打印一次
+        if self.frame_count % 600 == 0:  # 约10秒打印一次
             print(f"[audio] frame={self.frame_count} tex_peak={tex_peak:.6f} buf_peak={buf_peak:.6f} running_peak={self._running_peak:.6f}")
 
     def get_fft_data(self) -> Optional[np.ndarray]:

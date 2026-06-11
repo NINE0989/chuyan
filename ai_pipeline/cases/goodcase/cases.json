@@ -1,0 +1,25 @@
+﻿[
+  {
+    "id": "good_minimal_ring",
+    "type": "good",
+    "intent": "基础径向音频可视化",
+    "input": {
+      "audio_profile": "balanced",
+      "geometry_targets": ["circle", "line"],
+      "style_profile": "minimal"
+    },
+    "expected_signals": ["包含 iChannel0 采样", "存在 ring 或径向结构", "可编译通过"],
+    "known_risks": ["低频过强导致过曝"]
+  },
+  {
+    "id": "good_polygon_pulse",
+    "type": "good",
+    "intent": "多边形脉冲与分带驱动",
+    "input": {
+      "audio_profile": "dynamic",
+      "geometry_targets": ["polygon", "segment"],
+      "style_profile": "neon"
+    },
+    "expected_signals": ["低中高频分带驱动", "几何边缘平滑", "颜色随音频变化"]
+  }
+]
