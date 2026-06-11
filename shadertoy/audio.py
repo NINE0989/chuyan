@@ -6,7 +6,7 @@ import logging
 from typing import Optional
 import pyaudiowpatch as pyaudio
 import threading
-import audioUtils
+from . import audioUtils
 import os
 
 # 导入音频处理工具函数

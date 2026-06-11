@@ -1,10 +1,4 @@
 #version 330
-// AI_PIPELINE_HOOK
-// style_profile: minimal
-// generated_with: langgraph_agent
-// AI_PIPELINE_HOOK
-// style_profile: minimal
-// generated_with: langgraph_agent
 
 // ============================================================
 // 主包络 + 距离衰减平滑振幅

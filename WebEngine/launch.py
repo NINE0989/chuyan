@@ -30,7 +30,7 @@ def run_shader_viewer(shader_path: str, width: int = 1280, height: int = 360, mo
             borderless=True,
             monitor_index=monitor_index,
             center=False,
-            gesture_mode="remote",
+            gesture_mode="native",
         )
         app.run()
     except Exception as e:  # pragma: no cover - runtime logging

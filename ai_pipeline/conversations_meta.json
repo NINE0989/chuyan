@@ -8,7 +8,37 @@
   "web_848fc118e9": {
     "title": "[音乐: 蓝色多瑙河.mp3]这是一首圆舞曲，我想生成一个画面中有很多小元素随着音乐起舞的感觉，小元…",
     "created_at": "2026-06-11 00:49:28",
-    "updated_at": "2026-06-11 00:55:17",
-    "message_count": 8
+    "updated_at": "2026-06-11 22:06:12",
+    "message_count": 12
+  },
+  "web_652fecc57c": {
+    "title": "[音乐: 灯星_L.mp3]",
+    "created_at": "2026-06-11 22:10:37",
+    "updated_at": "2026-06-11 22:11:28",
+    "message_count": 2
+  },
+  "web_b3a31768fe": {
+    "title": "Step 2: 元数据提取\n\n\n采样点数: 假设为 2,646,000 点 (基于约60秒的音频)\n…",
+    "created_at": "2026-06-11 22:13:30",
+    "updated_at": "2026-06-11 22:15:46",
+    "message_count": 6
+  },
+  "web_6cfe394925": {
+    "title": "[音乐: 蓝色多瑙河.mp3]",
+    "created_at": "2026-06-11 22:55:53",
+    "updated_at": "2026-06-11 23:09:23",
+    "message_count": 6
+  },
+  "web_89f3e4950f": {
+    "title": "[音乐: 蓝色多瑙河.mp3]",
+    "created_at": "2026-06-12 00:35:40",
+    "updated_at": "2026-06-12 01:08:11",
+    "message_count": 24
+  },
+  "web_a7067d907b": {
+    "title": "新对话",
+    "created_at": "2026-06-12 00:43:51",
+    "updated_at": "2026-06-12 00:43:51",
+    "message_count": 0
   }
 }

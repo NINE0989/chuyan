@@ -73,12 +73,21 @@ def load_audio_from_file(path: str) -> str:
         try:
             wav_path = p
             if ext != ".wav":
+                # 查找 ffmpeg：优先系统 PATH，其次项目本地路径
+                import shutil, tempfile, subprocess
+                ffmpeg_path = shutil.which("ffmpeg")
+                if ffmpeg_path is None:
+                    local_ffmpeg = Path(__file__).resolve().parent.parent.parent / "tools" / "ffmpeg" / "bin" / "ffmpeg.exe"
+                    if local_ffmpeg.is_file():
+                        ffmpeg_path = str(local_ffmpeg)
+                    else:
+                        return json.dumps({"audio_array": [], "error": "需要 ffmpeg 才能解码非 WAV 音频。请下载 ffmpeg 放入 tools/ffmpeg/bin/ 或运行: conda install -c conda-forge ffmpeg"})
+
                 # 非 WAV → 用 ffmpeg 转为临时 WAV
-                import tempfile, subprocess
                 with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
                     wav_path = Path(tmp.name)
                 result = subprocess.run(
-                    ["ffmpeg", "-y", "-i", str(p), "-ac", "1", "-ar", "44100", "-f", "wav", str(wav_path)],
+                    [ffmpeg_path, "-y", "-i", str(p), "-ac", "1", "-ar", "44100", "-f", "wav", str(wav_path)],
                     capture_output=True, timeout=30,
                 )
                 if result.returncode != 0:
