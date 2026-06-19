@@ -10,10 +10,35 @@
 - `ai_pipeline/`：AI 生成流程（skills、MCP 协议适配、多 Agent 编排、hooks 质检）。
 - `prompts/`：提示词模板资源。
 
-## 运行方式
+## 环境准备
+
+### 一键创建 conda 环境（推荐）
+
+```powershell
+conda env create -f environment.yml
+conda activate chuyan
+```
+
+这会自动安装 Python 3.11、ffmpeg 及 `requirements.txt` 中所有 Python 依赖。
+
+> 如果已有 conda 环境仅需更新依赖：`conda env update -f environment.yml`
+
+### 手动安装（不依赖 conda）
+
+如果不用 conda，需自行确保 ffmpeg 已安装并在 PATH 中：
 
 ```powershell
 python -m pip install -r requirements.txt
+```
+
+ffmpeg 可通过以下方式之一安装：
+- **Chocolatey**: `choco install ffmpeg`
+- **Scoop**: `scoop install ffmpeg`
+- **官网下载**: https://ffmpeg.org/download.html（手动添加到 PATH）
+
+## 运行方式
+
+```powershell
 python -m shadertoy
 ```
 

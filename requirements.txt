@@ -1,3 +1,5 @@
+# FFmpeg 需通过 conda 安装: conda install -c conda-forge ffmpeg
+# 或使用 environment.yml 一键创建环境
 glfw
 PyOpenGL
 numpy
