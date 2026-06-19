@@ -2,6 +2,10 @@
 
 基于 Python + OpenGL 的 ShaderToy 风格运行时，包含音频可视化渲染与 AI 着色器生成链路（MCP + Skills + 多 Agent）。
 
+https://github.com/user-attachments/assets/b93a76da-2f85-4ab0-b9a9-4ba65548fbd1
+
+<img width="1654" height="818" alt="image" src="https://github.com/user-attachments/assets/487525a6-c5ca-4323-9fb7-a0465f479f30" />
+
 ## 项目结构
 
 - `shadertoy/`：渲染运行时、音频采集与 FFT、ShaderToy uniform 管理。
